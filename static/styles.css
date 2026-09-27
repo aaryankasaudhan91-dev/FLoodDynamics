@@ -671,3 +671,211 @@ body {
   font-size: 10px;
 }
 
+/* ---------------------------------------------------------
+   Upfront City Selection Modal & Dynamic City Bar
+--------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 540px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+  padding: 28px;
+  border: 1px solid var(--border-light);
+  transform: translateY(12px);
+  transition: transform 0.25s ease;
+}
+
+.modal-overlay.active .modal-card {
+  transform: translateY(0);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.modal-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.modal-titles h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.modal-titles p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.city-form {
+  margin-bottom: 18px;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+}
+
+.city-search-input {
+  flex: 1;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1.5px solid var(--border-light);
+  border-radius: 8px;
+  outline: none;
+  color: var(--text-main);
+  background: var(--bg-page);
+  transition: all 0.15s ease;
+}
+
+.city-search-input:focus {
+  border-color: var(--blue);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.submit-city-btn {
+  width: auto;
+  white-space: nowrap;
+  padding: 12px 20px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.preset-section {
+  margin-bottom: 16px;
+}
+
+.preset-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.city-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-btn {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background: var(--blue-light);
+  border-color: #bae6fd;
+  color: var(--blue);
+}
+
+.loading-status-box {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+}
+
+.status-spinner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-step-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--blue);
+}
+
+.progress-bar-wrap {
+  width: 100%;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--blue);
+  transition: width 0.3s ease;
+}
+
+.brand-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.change-city-btn {
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--blue);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.change-city-btn:hover {
+  background: var(--blue-light);
+  border-color: #bae6fd;
+}
+
