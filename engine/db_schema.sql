@@ -19,6 +19,7 @@ create table if not exists telemetry_river_gauges (
 select create_hypertable(
     'telemetry_river_gauges',
     'recorded_at',
+    
     chunk_time_interval => interval '7 days',
     if_not_exists => true
 );

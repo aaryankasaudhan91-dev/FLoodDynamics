@@ -1,7 +1,82 @@
-# Neighborhood graph and spatial data for Hindmata & Dadar area, Mumbai
-# Hindmata is a classic low-lying "bowl" in Mumbai that floods almost every monsoon.
-# During heavy rains, water rushes down from higher surrounding areas (Parel, Dadar TT)
-# and collects under the Hindmata flyover, cutting off access to KEM Hospital.
+# Spatial network datasets and database schema for FloodGuard (South-Central Mumbai)
+
+DB_SCHEMA_SQL = """-- FloodGuard TimescaleDB & PostGIS table definitions
+
+create extension if not exists postgis;
+create extension if not exists timescaledb;
+
+-- CWC and local river stage telemetry
+create table if not exists telemetry_river_gauges (
+    recorded_at timestamptz not null,
+    station_code varchar(64) not null,
+    agency_source varchar(32) not null,
+    water_stage_m_msl double precision not null,
+    discharge_cumecs double precision,
+    rate_of_rise_m_hr double precision,
+    qc_flag integer not null default 0,
+    location_geom geometry(Point, 4326) not null,
+    metadata jsonb
+);
+
+select create_hypertable(
+    'telemetry_river_gauges',
+    'recorded_at',
+    chunk_time_interval => interval '7 days',
+    if_not_exists => true
+);
+
+create index if not exists idx_river_gauges_time on telemetry_river_gauges (station_code, recorded_at desc);
+create index if not exists idx_river_gauges_geom on telemetry_river_gauges using gist (location_geom);
+
+-- IMD radar and satellite precipitation metadata
+create table if not exists gridded_rainfall_metadata (
+    grid_id uuid primary key default gen_random_uuid(),
+    timestamp_epoch timestamptz not null,
+    source_sensor varchar(32) not null,
+    resolution_m integer not null,
+    bounding_box geometry(Polygon, 4326) not null,
+    storage_path_uri varchar(256) not null,
+    max_intensity_mm_hr double precision,
+    mean_intensity_mm_hr double precision,
+    checksum_sha256 varchar(64) not null
+);
+
+create index if not exists idx_rainfall_grid_time on gridded_rainfall_metadata (timestamp_epoch desc);
+create index if not exists idx_rainfall_grid_geom on gridded_rainfall_metadata using gist (bounding_box);
+
+-- BMC municipal drain sensors
+create table if not exists municipal_drain_telemetry (
+    recorded_at timestamptz not null,
+    device_uid varchar(64) not null,
+    municipality varchar(64) not null default 'BMC',
+    drain_network varchar(64) not null,
+    water_stage_depth_m double precision not null,
+    freeboard_m double precision not null,
+    flow_velocity_m_s double precision,
+    sea_tide_height_m double precision,
+    qc_flag integer not null default 0,
+    location_geom geometry(Point, 4326) not null
+);
+
+select create_hypertable(
+    'municipal_drain_telemetry',
+    'recorded_at',
+    chunk_time_interval => interval '7 days',
+    if_not_exists => true
+);
+
+-- IMD NOWCAST alerts
+create table if not exists nowcast_alerts (
+    alert_id uuid primary key default gen_random_uuid(),
+    identifier varchar(64) not null unique,
+    sent_time_utc timestamptz not null,
+    valid_until_utc timestamptz not null,
+    severity varchar(32) not null,
+    hazard_profile varchar(64) not null,
+    expected_rain_mm double precision,
+    affected_polygon geometry(Polygon, 4326) not null
+);
+"""
 
 NODES = [
     {
@@ -9,9 +84,9 @@ NODES = [
         "name": "Hindmata Flyover Underpass",
         "lat": 19.0142,
         "lon": 72.8427,
-        "elevation_m": 4.2,  # Natural low-point in Dadar East
+        "elevation_m": 4.2,
         "catchment_area_sqm": 85000,
-        "runoff_c": 0.90,  # mostly concrete and tarmac, almost zero absorption
+        "runoff_c": 0.90,
         "pipe_diameter_m": 0.9,
         "pipe_slope": 0.0012,
         "storage_area_sqm": 7200,
@@ -37,7 +112,7 @@ NODES = [
         "name": "King's Circle / Maheshwari Udyan",
         "lat": 19.0285,
         "lon": 72.8550,
-        "elevation_m": 3.9,  # Very low depression near railway tracks
+        "elevation_m": 3.9,
         "catchment_area_sqm": 95000,
         "runoff_c": 0.92,
         "pipe_diameter_m": 0.95,
@@ -65,7 +140,7 @@ NODES = [
         "name": "KEM Hospital Emergency Gate",
         "lat": 19.0035,
         "lon": 72.8424,
-        "elevation_m": 7.4,  # Safe, higher ground
+        "elevation_m": 7.4,
         "catchment_area_sqm": 42000,
         "runoff_c": 0.82,
         "pipe_diameter_m": 1.1,
@@ -79,7 +154,7 @@ NODES = [
         "name": "Wadala Bridge (Elevated Road)",
         "lat": 19.0168,
         "lon": 72.8562,
-        "elevation_m": 8.0,  # High ridge bypass
+        "elevation_m": 8.0,
         "catchment_area_sqm": 54000,
         "runoff_c": 0.84,
         "pipe_diameter_m": 1.2,
@@ -93,7 +168,7 @@ NODES = [
         "name": "Tilak Flyover (Dadar West-East Link)",
         "lat": 19.0182,
         "lon": 72.8385,
-        "elevation_m": 9.5,  # Overbridge above railway tracks
+        "elevation_m": 9.5,
         "catchment_area_sqm": 35000,
         "runoff_c": 0.80,
         "pipe_diameter_m": 1.0,
@@ -135,7 +210,7 @@ NODES = [
         "name": "Britannia Outfall / Pumping Station",
         "lat": 19.0108,
         "lon": 72.8515,
-        "elevation_m": 3.1,  # Sea level discharge point
+        "elevation_m": 3.1,
         "catchment_area_sqm": 110000,
         "runoff_c": 0.91,
         "pipe_diameter_m": 2.2,
@@ -146,9 +221,7 @@ NODES = [
     }
 ]
 
-# Road segments connecting the intersections
 EDGES = [
-    # Direct road along Dr. B.A. Road (Straight path through Hindmata)
     {
         "id": "e_kings_dadar",
         "from": "kings_circle",
@@ -221,9 +294,6 @@ EDGES = [
         "name": "Acharya Donde Marg",
         "is_flyover": False
     },
-
-    # Elevated / Flood-Safe Alternative Routes
-    # Route via Tilak Flyover & Senapati Bapat Marg bypass
     {
         "id": "e_dadar_tilak",
         "from": "dadar_tt_circle",
@@ -278,8 +348,6 @@ EDGES = [
         "name": "J.B. Marg",
         "is_flyover": False
     },
-
-    # Route via Wadala elevated corridor (Eastern bypass)
     {
         "id": "e_dadar_wadala",
         "from": "dadar_tt_circle",
@@ -334,8 +402,6 @@ EDGES = [
         "name": "Jerbai Wadia Road",
         "is_flyover": True
     },
-
-    # Northern links near Matunga
     {
         "id": "e_kings_matunga",
         "from": "kings_circle",
@@ -374,7 +440,6 @@ EDGES = [
     }
 ]
 
-# Important public facilities to protect and monitor
 HOSPITALS_AND_SERVICES = [
     {
         "id": "kem_hospital",

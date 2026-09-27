@@ -1,7 +1,7 @@
 import time
 from fastapi.testclient import TestClient
 from main import app
-from engine.phase1_ingestion import (
+from engine.telemetry import (
     CWCIndiaWRISEngine,
     IMDWeatherEngine,
     ISROBhuvanSpatialEngine,

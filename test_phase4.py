@@ -1,7 +1,7 @@
 import base64
 from fastapi.testclient import TestClient
 from main import app
-from engine.phase4_navigation import (
+from engine.navigation import (
     VehicleClass,
     VEHICLE_THRESHOLDS,
     calculate_edge_cost,

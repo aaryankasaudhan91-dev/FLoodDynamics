@@ -16,10 +16,10 @@ HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", 8000))
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 
-from engine.neighborhood_data import NODES, HOSPITALS_AND_SERVICES
-from engine.hydraulic_model import HydraulicModel
-from engine.routing_engine import FloodRouter, VEHICLES
-from engine.phase1_ingestion import (
+from engine.spatial_data import NODES, HOSPITALS_AND_SERVICES, DB_SCHEMA_SQL
+from engine.hydrodynamics import HydraulicModel, phase2_router
+from engine.navigation import FloodRouter, VEHICLES, phase4_router
+from engine.telemetry import (
     CWCIndiaWRISEngine,
     IMDWeatherEngine,
     ISROBhuvanSpatialEngine,
@@ -29,8 +29,6 @@ from engine.phase1_ingestion import (
     MultiStageQCEngine,
     FallbackHierarchyEngine
 )
-from engine.phase2_routes import router as phase2_router
-from engine.phase4_routes import router as phase4_router
 
 app = FastAPI(
     title="FloodGuard IFPS API",
@@ -276,12 +274,7 @@ def switch_fallback_tier(tier_req: FallbackInput):
 
 @app.get("/api/v1/db/schema")
 def get_db_schema():
-    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine", "db_schema.sql")
-    try:
-        with open(schema_path, "r", encoding="utf-8") as f:
-            return {"schema": f.read()}
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Database schema file not found")
+    return {"schema": DB_SCHEMA_SQL}
 
 STATIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
