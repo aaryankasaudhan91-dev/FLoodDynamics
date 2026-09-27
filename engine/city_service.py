@@ -4,6 +4,7 @@ import urllib.request
 import urllib.parse
 import json
 from typing import Dict, Any, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger("floodguard.city_service")
 
@@ -43,17 +44,30 @@ class CityService:
         if cached and rain_override is None:
             return cached
 
-        encoded_city = urllib.parse.quote(clean_name)
+        query_text = clean_name if "india" in clean_name.lower() else f"{clean_name}, India"
+        encoded_city = urllib.parse.quote(query_text)
         nominatim_url = (
             f"https://nominatim.openstreetmap.org/search?"
-            f"q={encoded_city}&format=json&polygon_geojson=1&limit=1"
+            f"q={encoded_city}&countrycodes=in&format=json&polygon_geojson=1&limit=5"
         )
         nom_data = _http_get_json(nominatim_url, timeout=12)
 
-        if not nom_data or len(nom_data) == 0:
-            raise ValueError(f"Could not locate city '{clean_name}'. Please verify the city name.")
+        city_entry = None
+        if nom_data:
+            for item in nom_data:
+                is_place = item.get("class") in ["boundary", "place"]
+                is_city_type = item.get("type") in ["city", "town", "administrative", "state_district", "municipality", "state"]
+                is_in_india = "india" in item.get("display_name", "").lower()
+                if (is_place or is_city_type) and is_in_india:
+                    city_entry = item
+                    break
 
-        city_entry = nom_data[0]
+        if not city_entry:
+            raise ValueError(
+                f"'{clean_name}' is not recognized as a valid Indian city. "
+                f"Please enter an Indian city (e.g. Mumbai, Bengaluru, Delhi, Chennai, Kolkata, Pune, Hyderabad, Ahmedabad, Jaipur, etc.)."
+            )
+
         display_name = city_entry.get("display_name", clean_name)
         lat = float(city_entry["lat"])
         lon = float(city_entry["lon"])
@@ -89,9 +103,9 @@ class CityService:
 
         effective_rain = float(rain_override) if rain_override is not None else live_rain_mm
 
-        # Step 3: Fetch Real Hospitals & Healthcare facilities in the asked city via OSM
-        hospitals_query = urllib.parse.quote(f"hospitals in {clean_name}")
-        hosp_url = f"https://nominatim.openstreetmap.org/search?q={hospitals_query}&format=json&limit=8"
+        # Step 3: Fetch Real Hospitals & Healthcare facilities in the asked Indian city via OSM
+        hospitals_query = urllib.parse.quote(f"hospitals in {clean_name}, India")
+        hosp_url = f"https://nominatim.openstreetmap.org/search?q={hospitals_query}&countrycodes=in&format=json&limit=8"
         hosp_data = _http_get_json(hosp_url, timeout=10) or []
 
         facilities = []
@@ -110,55 +124,78 @@ class CityService:
                 "phone": "+91 108 / 112 Emergency"
             })
 
-        # Step 4: Generate Real Arterial Nodes across the full city
-        # We query transit/key intersections in this city from OSM
-        transit_query = urllib.parse.quote(f"railway station in {clean_name}")
-        transit_url = f"https://nominatim.openstreetmap.org/search?q={transit_query}&format=json&limit=6"
-        transit_data = _http_get_json(transit_url, timeout=10) or []
-
+        # Step 4: Generate Dense Real Land Nodes across the full city (Strictly on land, zero water nodes)
         raw_nodes = []
-        for idx, t in enumerate(transit_data):
-            t_lat = float(t["lat"])
-            t_lon = float(t["lon"])
-            t_name = t.get("display_name", "").split(",")[0]
-            raw_nodes.append({
-                "id": f"node_transit_{idx+1}",
-                "name": f"{t_name} (Transit Hub)",
-                "lat": t_lat,
-                "lon": t_lon,
-                "is_underpass": idx % 2 == 1
-            })
+        seen_coords = set()
 
-        # Also add city center and cardinal compass points to ensure full city coverage
-        lat_span = north - south
-        lon_span = east - west
-        cardinal_points = [
-            ("node_center", f"{clean_name} City Center", lat, lon, False),
-            ("node_north", f"North {clean_name} Junction", lat + 0.25 * lat_span, lon, False),
-            ("node_south", f"South {clean_name} Lowlands Underpass", lat - 0.25 * lat_span, lon, True),
-            ("node_east", f"East {clean_name} Ring Interchange", lat, lon + 0.25 * lon_span, False),
-            ("node_west", f"West {clean_name} Boulevard", lat, lon - 0.25 * lon_span, False),
+        # Always include the city center land coordinate
+        raw_nodes.append({
+            "id": "node_center",
+            "name": f"{clean_name} Central Junction",
+            "lat": round(lat, 5),
+            "lon": round(lon, 5),
+            "is_underpass": False
+        })
+        seen_coords.add((round(lat, 3), round(lon, 3)))
+
+        # Query real populated land features across the city in parallel
+        land_queries = [
+            (f"suburb in {clean_name}, India", 15),
+            (f"neighborhood in {clean_name}, India", 15),
+            (f"railway station in {clean_name}, India", 15),
+            (f"metro station in {clean_name}, India", 15),
+            (f"bus station in {clean_name}, India", 12),
+            (f"flyover in {clean_name}, India", 10),
+            (f"junction in {clean_name}, India", 10),
+            (f"chowk in {clean_name}, India", 10)
         ]
-        for nid, nname, nlat, nlon, is_under in cardinal_points:
-            if south <= nlat <= north and west <= nlon <= east:
-                raw_nodes.append({
-                    "id": nid,
-                    "name": nname,
-                    "lat": round(nlat, 5),
-                    "lon": round(nlon, 5),
-                    "is_underpass": is_under
-                })
 
-        # Deduplicate & cap nodes
-        unique_nodes = []
-        seen = set()
-        for nd in raw_nodes:
-            key = (round(nd["lat"], 3), round(nd["lon"], 3))
-            if key not in seen:
-                seen.add(key)
-                unique_nodes.append(nd)
+        def _fetch_land_features(item_tuple):
+            q_str, limit_val = item_tuple
+            encoded_query = urllib.parse.quote(q_str)
+            osm_url = f"https://nominatim.openstreetmap.org/search?q={encoded_query}&countrycodes=in&format=json&limit={limit_val}"
+            return _http_get_json(osm_url, timeout=8) or []
 
-        if not unique_nodes:
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            query_results = list(executor.map(_fetch_land_features, land_queries))
+
+        node_idx = 1
+        water_types = {"water", "bay", "sea", "ocean", "river", "lake", "reservoir", "wetland", "drain"}
+
+        for items in query_results:
+            for item in items:
+                # Strictly reject any water features
+                if item.get("class") in ["water", "natural"] and item.get("type") in water_types:
+                    continue
+                if item.get("type") in water_types:
+                    continue
+
+                i_lat = float(item["lat"])
+                i_lon = float(item["lon"])
+
+                # Strictly within the city bounding box
+                if not (south - 0.02 <= i_lat <= north + 0.02 and west - 0.02 <= i_lon <= east + 0.02):
+                    continue
+
+                coord_key = (round(i_lat, 3), round(i_lon, 3))
+                if coord_key not in seen_coords:
+                    seen_coords.add(coord_key)
+                    short_name = item.get("display_name", "").split(",")[0].strip()
+                    # Skip empty or numeric-only names
+                    if not short_name or short_name.isdigit():
+                        continue
+
+                    raw_nodes.append({
+                        "id": f"node_{node_idx}",
+                        "name": short_name,
+                        "lat": round(i_lat, 5),
+                        "lon": round(i_lon, 5),
+                        "is_underpass": node_idx % 4 == 0
+                    })
+                    node_idx += 1
+
+        unique_nodes = raw_nodes
+        if len(unique_nodes) < 2:
             unique_nodes = [{
                 "id": "node_center",
                 "name": f"{clean_name} Central Junction",
@@ -168,14 +205,27 @@ class CityService:
             }]
 
         # Step 5: Query Real Digital Elevation Model (DEM) from Open-Meteo Elevation API
+        # Limit to top 60 nodes to maintain crisp responsiveness
+        if len(unique_nodes) > 60:
+            unique_nodes = unique_nodes[:60]
+
         lat_list_str = ",".join(str(n["lat"]) for n in unique_nodes)
         lon_list_str = ",".join(str(n["lon"]) for n in unique_nodes)
         elev_url = f"https://api.open-meteo.com/v1/elevation?latitude={lat_list_str}&longitude={lon_list_str}"
         elev_data = _http_get_json(elev_url, timeout=10) or {}
         elevations = elev_data.get("elevation", [15.0] * len(unique_nodes))
 
+        # Strictly exclude any sea/ocean coordinates (elevation <= 0.0 m)
+        land_verified_nodes = []
         for idx, n in enumerate(unique_nodes):
-            n["elevation_m"] = float(elevations[idx]) if idx < len(elevations) else 15.0
+            e_val = float(elevations[idx]) if idx < len(elevations) else 15.0
+            if e_val <= 0.0:
+                continue
+            n["elevation_m"] = e_val
+            land_verified_nodes.append(n)
+
+        if len(land_verified_nodes) >= 2:
+            unique_nodes = land_verified_nodes
 
         # Step 6: Hydrodynamic Inundation Modeling (Rational Runoff & Depressions)
         mean_elev = sum(n["elevation_m"] for n in unique_nodes) / max(1, len(unique_nodes))

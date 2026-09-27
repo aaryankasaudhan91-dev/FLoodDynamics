@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FloodGuard — Urban Flood Nowcasting & Safe Navigation</title>
   <meta name="description" content="Predicts street-level urban waterlogging in Mumbai and calculates flood-safe navigation routes.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌊</text></svg>">
 
   <!-- Inter Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,7 +18,7 @@
 
   <!-- Chart.js for River Stage -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="/static/styles.css?v=4.0">
+  <link rel="stylesheet" href="/static/styles.css?v=5.0">
 </head>
 <body>
   <!-- Upfront City Selection Modal (Prompts User on Launch) -->
@@ -26,8 +27,8 @@
       <div class="modal-header">
         <div class="modal-icon">🌊</div>
         <div class="modal-titles">
-          <h2>FloodGuard Real-Time City Navigation</h2>
-          <p>Live urban flood nowcasting, digital elevation model (DEM), and safe routing for any city in the world.</p>
+          <h2>FloodGuard India — Real-Time City Navigation</h2>
+          <p>Live urban flood nowcasting, digital elevation model (DEM), and safe emergency routing for Indian cities.</p>
         </div>
       </div>
 
@@ -37,7 +38,7 @@
             type="text" 
             id="cityInput" 
             class="city-search-input" 
-            placeholder="Type city name (e.g. Bengaluru, Mumbai, Delhi, London, New York...)" 
+            placeholder="Type Indian city (e.g. Mumbai, Bengaluru, Delhi, Chennai, Kolkata, Pune...)" 
             autocomplete="off" 
             required 
             autofocus
@@ -49,16 +50,16 @@
       </form>
 
       <div class="preset-section">
-        <span class="preset-label">Quick Suggestions:</span>
+        <span class="preset-label">Major Indian Cities:</span>
         <div class="city-chips">
-          <button type="button" class="chip-btn" data-city="Bengaluru">Bengaluru</button>
           <button type="button" class="chip-btn" data-city="Mumbai">Mumbai</button>
+          <button type="button" class="chip-btn" data-city="Bengaluru">Bengaluru</button>
           <button type="button" class="chip-btn" data-city="Delhi">Delhi</button>
           <button type="button" class="chip-btn" data-city="Chennai">Chennai</button>
+          <button type="button" class="chip-btn" data-city="Kolkata">Kolkata</button>
           <button type="button" class="chip-btn" data-city="Hyderabad">Hyderabad</button>
-          <button type="button" class="chip-btn" data-city="London">London</button>
-          <button type="button" class="chip-btn" data-city="New York">New York</button>
-          <button type="button" class="chip-btn" data-city="Tokyo">Tokyo</button>
+          <button type="button" class="chip-btn" data-city="Pune">Pune</button>
+          <button type="button" class="chip-btn" data-city="Ahmedabad">Ahmedabad</button>
         </div>
       </div>
 
@@ -87,19 +88,19 @@
         <span id="alertMsg">Select or confirm a city to initialize real-time telemetry.</span>
       </div>
 
-      <!-- Map Floating Controls & Legend -->
+      <!-- Kid-Friendly Map Floating Legend -->
       <div class="map-overlay-card legend-card">
-        <div class="legend-title">Street Water Level</div>
-        <div class="legend-row"><span class="dot green"></span> &lt; 15 cm (Passable)</div>
-        <div class="legend-row"><span class="dot yellow"></span> 15 – 45 cm (Waterlogged)</div>
-        <div class="legend-row"><span class="dot red"></span> &gt; 45 cm (Impassable)</div>
+        <div class="legend-title">🚦 Water on Roads</div>
+        <div class="legend-row"><span class="dot green"></span> <strong>&lt; 15 cm:</strong> Ankle Deep (Safe & Dry 👟🚗)</div>
+        <div class="legend-row"><span class="dot yellow"></span> <strong>15–45 cm:</strong> Knee Deep (Big Puddles! 🛞)</div>
+        <div class="legend-row"><span class="dot red"></span> <strong>&gt; 45 cm:</strong> Deep Water (Danger! Blocked 🛑)</div>
       </div>
 
       <!-- Map Layers Control -->
       <div class="map-overlay-card layers-card">
-        <label><input type="checkbox" id="chkFloodZones" checked> Flood Depth Zones</label>
-        <label><input type="checkbox" id="chkHospitals" checked> Hospitals & Services</label>
-        <label><input type="checkbox" id="chkRoutes" checked> Navigation Routes</label>
+        <label><input type="checkbox" id="chkFloodZones" checked> 🌊 Water Zones</label>
+        <label><input type="checkbox" id="chkHospitals" checked> 🏥 Hospitals</label>
+        <label><input type="checkbox" id="chkRoutes" checked> 🚗 Safe Routes</label>
       </div>
     </div>
 
@@ -108,38 +109,39 @@
       <!-- Integrated Clean Brand Header inside Sidebar -->
       <div class="sidebar-header">
         <div class="brand-row">
-          <div class="brand-title">FloodGuard</div>
+          <div class="brand-title">🛡️ FloodGuard India</div>
           <div class="brand-badge-wrap">
             <span id="cityBadge" class="brand-badge">Select City</span>
             <button id="btnChangeCity" class="change-city-btn" title="Switch to another city">Change City</button>
           </div>
         </div>
         <div class="weather-row">
-          <span class="w-item">Rain: <strong id="navRainVal">-- mm/hr</strong></span>
+          <span class="w-item">🌧️ Rain: <strong id="navRainVal">-- mm/hr</strong></span>
           <span class="w-divider">•</span>
-          <span class="w-item">Temp: <strong id="navTempVal">-- °C</strong></span>
+          <span class="w-item">🌡️ Temp: <strong id="navTempVal">-- °C</strong></span>
           <span class="w-divider">•</span>
-          <span class="w-item">Status: <strong id="navRiverVal" class="text-green">Ready</strong></span>
+          <span class="w-item">🚦 Status: <strong id="navRiverVal" class="text-green">Ready</strong></span>
         </div>
         <!-- 3 Demo Flow Buttons -->
         <div class="demo-pills">
-          <button id="btnCalm" class="demo-btn active">1. Live / Normal</button>
-          <button id="btnStorm" class="demo-btn">2. Heavy Rain</button>
+          <button id="btnCalm" class="demo-btn active">☀️ 1. Sunny Day</button>
+          <button id="btnStorm" class="demo-btn">🌧️ 2. Rain Storm</button>
+          <button id="btnSolution" class="demo-btn">🛡️ 3. Safe Route</button>
         </div>
       </div>
 
       <!-- Tabs Header -->
       <div class="sidebar-tabs">
-        <button class="tab-btn active" data-tab="nav">Safe Routing</button>
-        <button class="tab-btn" data-tab="sim">Rain Simulator</button>
-        <button class="tab-btn" data-tab="facilities">Facilities</button>
+        <button class="tab-btn active" data-tab="nav">🚗 Safe Route</button>
+        <button class="tab-btn" data-tab="sim">🌧️ Rain Simulator</button>
+        <button class="tab-btn" data-tab="facilities">🏥 Hospitals</button>
       </div>
 
       <!-- TAB 1: NAVIGATION & ROUTING -->
       <div class="tab-panel active" id="tabNav">
         <div class="card-section">
-          <h3>Emergency Route Calculator</h3>
-          <p class="muted">Finds standard vs flood-safe paths that bypass submerged streets.</p>
+          <h3>Safe Travel Guide</h3>
+          <p class="muted">Finds a safe dry road for you and keeps you away from deep water puddles!</p>
 
           <div class="form-group">
             <label>Trip Preset</label>
@@ -149,36 +151,44 @@
             </select>
           </div>
 
+          <div id="stormPromptBox" class="storm-prompt-box" style="display: none;">
+            <div class="storm-prompt-title">🌧️ Storm Alert! Where are you going?</div>
+            <p>Please select your <strong>Start Point</strong> and <strong>Destination</strong> below to get your flood-safe detour!</p>
+            <div class="storm-steps-hint">
+              <span>🟢 1. Pick Start</span> ➔ <span>🏁 2. Pick Destination</span> ➔ <span>🛡️ 3. Safe Route</span>
+            </div>
+          </div>
+
           <div class="route-inputs">
             <div class="form-group">
-              <label>Starting Point</label>
+              <label>Where are you? (Start)</label>
               <select id="selStartNode" class="input-select"></select>
             </div>
             <div class="form-group">
-              <label>Destination</label>
+              <label>Where to go? (End)</label>
               <select id="selEndNode" class="input-select"></select>
             </div>
           </div>
 
           <div class="form-group">
-            <label>Vehicle Type</label>
+            <label>Choose Your Vehicle</label>
             <div class="vehicle-picker">
-              <button class="veh-btn active" data-v="ambulance">Ambulance (15cm)</button>
-              <button class="veh-btn" data-v="car">Car (15cm)</button>
-              <button class="veh-btn" data-v="heavy_truck">Rescue Truck (50cm)</button>
-              <button class="veh-btn" data-v="pedestrian">Walking (12cm)</button>
+              <button class="veh-btn active" data-v="ambulance">🚑 Ambulance (15cm)</button>
+              <button class="veh-btn" data-v="car">🚗 Car (15cm)</button>
+              <button class="veh-btn" data-v="heavy_truck">🚛 Rescue Truck (50cm)</button>
+              <button class="veh-btn" data-v="pedestrian">🚶 Walking (12cm)</button>
             </div>
           </div>
 
-          <button id="btnRecalculateRoute" class="primary-btn">Calculate Flood-Safe Route</button>
+          <button id="btnRecalculateRoute" class="primary-btn">🔍 Find Safe Route Now</button>
         </div>
 
         <!-- Route Comparison -->
         <div class="route-comparison">
-          <!-- Standard Route -->
+          <!-- Risky Route -->
           <div class="route-card" id="cardStandardRoute">
             <div class="route-header">
-              <span class="route-title">Standard Shortest Route</span>
+              <span class="route-title">❌ Risky Shortest Path</span>
               <span id="stdBadge" class="badge">Checking...</span>
             </div>
             <div class="route-stats">
@@ -186,27 +196,27 @@
               <div><span class="stat-num" id="stdTime">--</span> mins</div>
               <div>Water: <strong id="stdDepth">-- cm</strong></div>
             </div>
-            <p id="stdNote" class="route-note">Traverses through Dr. Ambedkar Road.</p>
+            <p id="stdNote" class="route-note">May go through deep water puddles.</p>
           </div>
 
           <!-- Safe Route -->
           <div class="route-card safe" id="cardSafeRoute">
             <div class="route-header">
-              <span class="route-title">FloodGuard Safe Route</span>
-              <span id="safeBadge" class="badge green">Safe</span>
+              <span class="route-title">🛡️ FloodGuard Safe Route</span>
+              <span id="safeBadge" class="badge green">100% Safe</span>
             </div>
             <div class="route-stats">
               <div><span class="stat-num text-green" id="safeDist">--</span> km</div>
               <div><span class="stat-num text-green" id="safeTime">--</span> mins</div>
               <div>Water: <strong id="safeDepth" class="text-green">0 cm</strong></div>
             </div>
-            <p id="safeNote" class="route-note">Takes elevated Tilak Flyover and avoids Hindmata.</p>
+            <p id="safeNote" class="route-note">Takes the high dry road and flyovers!</p>
           </div>
         </div>
 
         <!-- Turn-by-Turn Steps -->
         <div class="steps-section">
-          <h4>Safe Turn-by-Turn Navigation</h4>
+          <h4>🚶 Step-by-Step Directions</h4>
           <ol id="routeStepsList" class="steps-list">
             <li class="empty-step">Select destination to view turn instructions.</li>
           </ol>
@@ -265,13 +275,11 @@
         </div>
 
         <div class="card-section">
-          <h4>Hydrology Model Parameters</h4>
+          <h4>💡 How Does FloodGuard Keep You Safe?</h4>
           <p class="small-text">
-            <strong>Surface Runoff (Rational Method):</strong> <code>Q = C × I × A</code><br>
-            Calculates inflow from rain intensity over impervious urban surfaces.<br><br>
-            <strong>Drainage Capacity (Manning's):</strong> <code>V = 1/n R^(2/3) S^(1/2)</code><br>
-            Discharge capacity of storm sewer conduits.<br><br>
-            <strong>Street Surcharge:</strong> Excess water pools in depressions when runoff exceeds drainage capacity.
+            🌧️ <strong>Rain Pools Downhill:</strong> When heavy rain falls, water slides down to low underpasses and valleys.<br><br>
+            🚦 <strong>Puddle Warning:</strong> Green is dry (&lt;15cm), Yellow is knee-deep (15–45cm), Red is dangerous flood (&gt;45cm)!<br><br>
+            🛡️ <strong>Safe Escape Route:</strong> FloodGuard automatically directs your vehicle onto dry bridges so you never get stuck in water!
           </p>
         </div>
       </div>
@@ -279,14 +287,14 @@
       <!-- TAB 3: HOSPITALS & SERVICES -->
       <div class="tab-panel" id="tabFacilities">
         <div class="card-section">
-          <h3>Emergency Infrastructure</h3>
-          <p class="muted">Live access status for local trauma centers, fire stations, and relief camps.</p>
+          <h3>🏥 Hospitals & Emergency Centers</h3>
+          <p class="muted">Check which hospital gates are dry, clear, and safe to enter!</p>
           <div id="facilitiesList" class="facility-list"></div>
         </div>
       </div>
     </aside>
   </div>
 
-  <script src="/static/app.js?v=4.0"></script>
+  <script src="/static/app.js?v=6.0"></script>
 </body>
 </html>

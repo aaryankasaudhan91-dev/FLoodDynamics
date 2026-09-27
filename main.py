@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -328,10 +328,22 @@ def get_db_schema():
 STATIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    svg_icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌊</text></svg>'
+    return Response(content=svg_icon, media_type="image/svg+xml")
+
 @app.get("/")
 def home():
     index_file = os.path.join(STATIC_PATH, "index.html")
-    return FileResponse(index_file)
+    return FileResponse(
+        index_file,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

@@ -879,3 +879,88 @@ body {
   border-color: #bae6fd;
 }
 
+/* Storm Prompt Box: Ask Start and End first */
+.storm-prompt-box {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1.5px solid #60a5fa;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+  animation: fadeInDown 0.3s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.storm-prompt-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e40af;
+  margin-bottom: 4px;
+}
+
+.storm-prompt-box p {
+  font-size: 11px;
+  color: #1e3a8a;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.storm-steps-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #2563eb;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Pulse Highlight for inputs */
+.pulse-highlight {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+  animation: pulseGlow 1.5s infinite alternate;
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
+  100% { box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.4); }
+}
+
+.popup-actions-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.popup-action-btn {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.15s ease;
+}
+
+.popup-action-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.popup-action-btn.start {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.popup-action-btn.end {
+  background: #10b981;
+  color: #ffffff;
+}

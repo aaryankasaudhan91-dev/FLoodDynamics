@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------------------------------------------------------
   // Core: Real-Time Live City Fetch & Ingestion (Zero Mock)
   // ---------------------------------------------------------
-  async function loadCity(cityName, rainOverride = null, pumpPct = 100.0) {
+  async function loadCity(cityName, rainOverride = null, pumpPct = 100.0, autoRoute = true) {
     if (!cityName || !cityName.trim()) return;
     const cleanName = cityName.trim();
 
@@ -128,8 +128,8 @@ document.addEventListener('DOMContentLoaded', () => {
       cityLoadingStatus.style.display = 'none';
       btnSubmitCity.disabled = false;
 
-      // Render ONLY the asked city ("that time only show ask city no other city")
-      renderCity(cityData);
+      // Render ONLY the asked city
+      renderCity(cityData, autoRoute);
 
     } catch (err) {
       console.error('City load error:', err);
@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------------------------------------------------------
   // Render City: Boundaries, Flood Zones, Facilities, UI
   // ---------------------------------------------------------
-  function renderCity(data) {
+  function renderCity(data, autoRoute = true) {
     // 1. Purge all prior layers completely
     layers.boundary.clearLayers();
     layers.floodZones.clearLayers();
@@ -195,19 +195,19 @@ document.addEventListener('DOMContentLoaded', () => {
       map.setView(data.center, 12);
     }
 
-    // 5. Update Alert Banner
+    // 5. Update Alert Banner (Super Easy to Understand)
     if (data.summary.flooded_nodes > 1) {
       alertBanner.className = 'alert-banner danger';
-      alertIcon.textContent = '●';
-      alertMsg.textContent = `Monsoon Alert in ${data.city_name}: ${data.summary.flooded_nodes} arterial corridors waterlogged. FloodGuard safe routes active.`;
+      alertIcon.textContent = '🛑';
+      alertMsg.textContent = `Flood Alert in ${data.city_name}: ${data.summary.flooded_nodes} roads have deep water! Follow the Blue Safe Route to stay dry!`;
     } else if (data.summary.flooded_nodes === 1) {
       alertBanner.className = 'alert-banner warning';
-      alertIcon.textContent = '▲';
-      alertMsg.textContent = `Water ponding detected at low-elevation points in ${data.city_name}. Caution advised.`;
+      alertIcon.textContent = '⚠️';
+      alertMsg.textContent = `Caution in ${data.city_name}: Some puddles on low roads. Drive slowly and stay safe!`;
     } else {
       alertBanner.className = 'alert-banner normal';
-      alertIcon.textContent = '✓';
-      alertMsg.textContent = `Normal traffic conditions across ${data.city_name}. All roads and underpasses passable.`;
+      alertIcon.textContent = '☀️';
+      alertMsg.textContent = `Yay! All roads in ${data.city_name} are dry and safe to travel!`;
     }
 
     // 6. Render Real Flood Hazard Nodes across the city
@@ -222,8 +222,50 @@ document.addEventListener('DOMContentLoaded', () => {
     // 9. Render Hydrodynamic Telemetry Chart
     renderChart(data);
 
-    // 10. Automatically calculate initial flood-safe route
-    calculateCityRoute();
+    // 10. Route Calculation Handling
+    const promptBox = document.getElementById('stormPromptBox');
+    if (!autoRoute) {
+      // In storm mode, do not directly show route! First prompt for start and destination:
+      layers.routes.clearLayers();
+      if (promptBox) {
+        promptBox.style.display = 'block';
+        promptBox.innerHTML = `
+          <div class="storm-prompt-title">🌧️ Storm Alert Active (${data.weather.rain_mm_hr} mm/hr)</div>
+          <p>Please select your <strong>Start Point</strong> and <strong>Destination</strong> below to calculate a dry, safe detour!</p>
+          <div class="storm-steps-hint">
+            <span>🟢 1. Pick Start</span> ➔ <span>🏁 2. Pick Destination</span> ➔ <span>🛡️ 3. Safe Route</span>
+          </div>
+          <div style="font-size:10px; color:#2563eb; margin-top:6px;">💡 Or click any marker directly on the map to set Start or Destination!</div>
+        `;
+      }
+      if (selStartNode) selStartNode.classList.add('pulse-highlight');
+      if (selEndNode) selEndNode.classList.add('pulse-highlight');
+
+      // Reset route result displays to prompt state
+      if (stdDist) stdDist.textContent = '--';
+      if (stdTime) stdTime.textContent = '--';
+      if (stdDepth) { stdDepth.textContent = '-- cm'; stdDepth.className = 'text-muted'; }
+      if (stdBadge) { stdBadge.className = 'badge'; stdBadge.textContent = 'Waiting for Points'; }
+      if (stdNote) stdNote.textContent = 'Select start and destination points to view shortcut flood hazards.';
+
+      if (safeDist) safeDist.textContent = '--';
+      if (safeTime) safeTime.textContent = '--';
+      if (safeDepth) { safeDepth.textContent = '-- cm'; safeDepth.className = 'text-muted'; }
+      if (safeBadge) { safeBadge.className = 'badge'; safeBadge.textContent = '👆 Choose Points'; }
+      if (safeNote) safeNote.textContent = 'Select where you are and where you need to go to generate safe detour.';
+
+      const routeStepsList = document.getElementById('routeStepsList');
+      if (routeStepsList) {
+        routeStepsList.innerHTML = '<li class="empty-step">🌧️ Storm mode active! Choose your Start Point and Destination above, then click "Find Safe Route Now" to see dry roads.</li>';
+      }
+
+      switchTab('nav');
+    } else {
+      if (promptBox) promptBox.style.display = 'none';
+      if (selStartNode) selStartNode.classList.remove('pulse-highlight');
+      if (selEndNode) selEndNode.classList.remove('pulse-highlight');
+      calculateCityRoute();
+    }
   }
 
   function renderNodes(nodes) {
@@ -234,6 +276,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const isSevere = node.depth_cm >= 45.0;
       const circleColor = isSevere ? '#ef4444' : (isFlooded ? '#d97706' : '#10b981');
       const radius = 60 + Math.min(220, node.depth_cm * 3.5);
+
+      let kidStatus = '🟢 Safe & Dry Road';
+      let kidAdvice = 'Road is clear! Cars and walking are safe. 👟🚗';
+      if (isSevere) {
+        kidStatus = '🔴 DANGER: Flooded Street!';
+        kidAdvice = 'Water is waist-deep! Never drive or walk here! 🛑';
+      } else if (isFlooded) {
+        kidStatus = '🟡 CAUTION: Knee-Deep Puddles!';
+        kidAdvice = 'Water is splashing! Only big trucks should pass. 🛞';
+      }
 
       // Inundation buffer circle
       const circle = L.circle([node.lat, node.lon], {
@@ -246,11 +298,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const popupHtml = `
         <div class="custom-popup">
-          <h4>${node.name}</h4>
-          <p><strong>Elevation:</strong> ${node.elevation_m}m MSL</p>
-          <p><strong>Infrastructure:</strong> ${node.is_underpass ? 'Underpass / Subway Depression' : 'Surface Arterial Corridor'}</p>
-          <div class="depth-tag" style="background:${circleColor}18; color:${circleColor}; border:1px solid ${circleColor}44;">
-            Water Depth: ${node.depth_cm} cm (${node.status})
+          <h4>📍 ${node.name}</h4>
+          <p><strong>Safety Status:</strong> <span style="color:${circleColor}; font-weight:700;">${kidStatus}</span></p>
+          <p><strong>Water Puddle:</strong> ${node.depth_cm} cm deep</p>
+          <div class="depth-tag" style="background:${circleColor}18; color:${circleColor}; border:1px solid ${circleColor}44; font-size:11px; padding:4px 8px; border-radius:6px; margin:4px 0; font-weight:600;">
+            ${kidAdvice}
+          </div>
+          <p style="font-size:10px; color:#94a3b8; margin-top:4px;">Elevation: ${node.elevation_m}m MSL • ${node.is_underpass ? 'Low-lying depression' : 'High ground'}</p>
+          <div class="popup-actions-row">
+            <button class="popup-action-btn start" onclick="window.selectRoutePoint('${node.id}', 'start')">🟢 Start Here</button>
+            <button class="popup-action-btn end" onclick="window.selectRoutePoint('${node.id}', 'end')">🏁 End Here</button>
           </div>
         </div>
       `;
@@ -281,22 +338,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     facilities.forEach(f => {
-      const statusColor = f.alert_level === 'CRITICAL' ? '#ef4444' : (f.alert_level === 'WARNING' ? '#d97706' : '#10b981');
+      const isCritical = f.alert_level === 'CRITICAL';
+      const isWarning = f.alert_level === 'WARNING';
+      const statusColor = isCritical ? '#ef4444' : (isWarning ? '#d97706' : '#10b981');
+      const friendlyStatus = isCritical
+        ? '🔴 Gate Flooded (Use dry detour)'
+        : (isWarning ? '🟡 Entrance Has Puddles' : '🟢 Gate is Safe & Dry!');
 
       const icon = L.divIcon({
         className: 'facility-icon',
-        html: `<div style="background:#ffffff; border:2px solid ${statusColor}; color:${statusColor}; border-radius:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,0.2);">H</div>`,
+        html: `<div style="background:#ffffff; border:2px solid ${statusColor}; color:${statusColor}; border-radius:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,0.2);">🏥</div>`,
         iconSize: [26, 26],
         iconAnchor: [13, 13]
       });
 
       const marker = L.marker([f.lat, f.lon], { icon }).bindPopup(`
         <div class="custom-popup">
-          <h4>${f.name}</h4>
+          <h4>🏥 ${f.name}</h4>
+          <p><strong>Gate Status:</strong> <span style="color:${statusColor}; font-weight:700;">${friendlyStatus}</span></p>
           <p><strong>Address:</strong> ${f.full_address}</p>
-          <p><strong>Contact:</strong> ${f.phone}</p>
-          <p><strong>Water Near Gate:</strong> <span style="color:${statusColor}; font-weight:600;">${f.water_depth_cm} cm</span></p>
-          <p>${f.message}</p>
+          <p><strong>Emergency Call:</strong> ${f.phone}</p>
+          <p><strong>Water Depth:</strong> ${f.water_depth_cm} cm</p>
+          <div class="popup-actions-row">
+            <button class="popup-action-btn end" onclick="window.selectRoutePoint('${f.id}', 'end')">🏁 Navigate Here</button>
+          </div>
         </div>
       `);
       layers.facilities.addLayer(marker);
@@ -305,10 +370,10 @@ document.addEventListener('DOMContentLoaded', () => {
       card.className = 'facility-card';
       card.innerHTML = `
         <div class="facility-title">
-          <span>${f.name}</span>
-          <span style="color:${statusColor}; font-size:10px; font-weight:600;">${f.alert_level}</span>
+          <span>🏥 ${f.name}</span>
+          <span style="color:${statusColor}; font-size:10px; font-weight:700;">${friendlyStatus}</span>
         </div>
-        <div class="facility-desc">${f.message}</div>
+        <div class="facility-desc">${f.water_depth_cm > 15 ? 'Water near gate: ' + f.water_depth_cm + 'cm. Ambulances should take the elevated safe route.' : 'Gate is completely clear and dry! Safe for all patients.'}</div>
         <div style="font-size:10px; color:#94a3b8; margin-top:3px;">${f.phone}</div>
       `;
       card.addEventListener('click', () => {
@@ -326,21 +391,20 @@ document.addEventListener('DOMContentLoaded', () => {
     nodes.forEach(n => {
       const opt1 = document.createElement('option');
       opt1.value = n.id;
-      opt1.textContent = `${n.name} (${n.elevation_m}m)`;
+      opt1.textContent = `📍 ${n.name} (${n.elevation_m}m)`;
       selStartNode.appendChild(opt1);
 
       const opt2 = document.createElement('option');
       opt2.value = n.id;
-      opt2.textContent = `${n.name} (${n.elevation_m}m)`;
+      opt2.textContent = `📍 ${n.name} (${n.elevation_m}m)`;
       selEndNode.appendChild(opt2);
     });
 
-    // Also allow routing to hospitals
     if (facilities && facilities.length > 0) {
       facilities.forEach(fac => {
         const optFac = document.createElement('option');
         optFac.value = fac.id;
-        optFac.textContent = `[Hospital] ${fac.name}`;
+        optFac.textContent = `🏥 [Hospital] ${fac.name}`;
         selEndNode.appendChild(optFac);
       });
     }
@@ -350,6 +414,28 @@ document.addEventListener('DOMContentLoaded', () => {
       selEndNode.selectedIndex = Math.min(nodes.length - 1, 1);
     }
   }
+
+  // Global handler for selecting Start / End point directly from map marker popups
+  window.selectRoutePoint = function(id, type) {
+    if (type === 'start') {
+      if (selStartNode) selStartNode.value = id;
+    } else if (type === 'end') {
+      if (selEndNode) selEndNode.value = id;
+    }
+
+    switchTab('nav');
+
+    const promptBox = document.getElementById('stormPromptBox');
+    if (promptBox) {
+      const sName = selStartNode.options[selStartNode.selectedIndex]?.text || 'Selected';
+      const eName = selEndNode.options[selEndNode.selectedIndex]?.text || 'Selected';
+      promptBox.innerHTML = `
+        <div class="storm-prompt-title">📍 Points Selected</div>
+        <p>🟢 Start: <strong>${sName}</strong><br>🏁 Destination: <strong>${eName}</strong></p>
+        <p style="font-weight:600; color:#2563eb;">Ready! Click "Find Safe Route Now" below to calculate your detour!</p>
+      `;
+    }
+  };
 
   // ---------------------------------------------------------
   // Real-Time OSRM Routing (Standard vs Flood-Safe Bypass)
@@ -363,14 +449,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let startObj = state.nodes.find(n => n.id === startId);
     let endObj = state.nodes.find(n => n.id === endId);
 
-    // If destination is a hospital
     if (!endObj && state.facilities) {
       endObj = state.facilities.find(f => f.id === endId);
     }
 
     if (!startObj || !endObj) return;
 
-    btnRecalculateRoute.textContent = 'Calculating live route...';
+    // Clear pulse highlights and prompt box
+    if (selStartNode) selStartNode.classList.remove('pulse-highlight');
+    if (selEndNode) selEndNode.classList.remove('pulse-highlight');
+    const promptBox = document.getElementById('stormPromptBox');
+    if (promptBox) promptBox.style.display = 'none';
+
+    btnRecalculateRoute.textContent = '⏳ Finding safest dry route...';
 
     try {
       const payload = {
@@ -397,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       console.error('Route error:', err);
     } finally {
-      btnRecalculateRoute.textContent = 'Calculate Flood-Safe Route';
+      btnRecalculateRoute.textContent = '🔍 Find Safe Route Now';
     }
   }
 
@@ -413,14 +504,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (standard.max_depth_cm >= 15.0) {
         stdBadge.className = 'badge';
-        stdBadge.textContent = 'Waterlogged';
+        stdBadge.textContent = '❌ Has Floods!';
         stdDepth.className = 'text-red';
-        stdNote.textContent = `Crosses high water near ${standard.flooded_node || 'low-lying depression'}.`;
+        stdNote.textContent = `Crosses ${standard.max_depth_cm}cm water puddle! Your car might get stuck!`;
       } else {
         stdBadge.className = 'badge green';
-        stdBadge.textContent = 'Clear';
+        stdBadge.textContent = '✅ All Clear';
         stdDepth.className = 'text-green';
-        stdNote.textContent = 'All traversed corridors dry and passable.';
+        stdNote.textContent = 'All roads along this shortcut are dry.';
       }
 
       if (standard.geometry && standard.geometry.length > 0) {
@@ -429,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
           weight: 3.5,
           dashArray: standard.max_depth_cm >= 15.0 ? '6, 6' : null,
           opacity: 0.8
-        }).bindPopup(`<b>Standard Shortest Route</b><br>Water depth: ${standard.max_depth_cm} cm`);
+        }).bindPopup(`<b>❌ Risky Shortcut</b><br>Max water puddle: ${standard.max_depth_cm} cm`);
         layers.routes.addLayer(stdLine);
       }
     }
@@ -441,17 +532,17 @@ document.addEventListener('DOMContentLoaded', () => {
       safeDepth.textContent = `${safe.max_depth_cm} cm`;
 
       safeBadge.className = 'badge green';
-      safeBadge.textContent = safe.detour_taken ? 'Safe Detour' : 'Safe Direct';
+      safeBadge.textContent = safe.detour_taken ? '🛡️ Safe Detour' : '🛡️ 100% Safe & Dry';
       safeNote.textContent = safe.detour_taken
-        ? `Bypasses submerged hazard (${safe.bypassed_hazard}) via elevated corridors.`
-        : 'Direct route is safe for transit.';
+        ? `Takes the high elevated bridge to avoid deep flood water!`
+        : 'Direct road is already dry and safe!';
 
       if (safe.geometry && safe.geometry.length > 0) {
         const safeLine = L.polyline(safe.geometry, {
           color: '#0284c7',
           weight: 5,
           opacity: 0.95
-        }).bindPopup(`<b>FloodGuard Safe Route</b><br>0 cm water exposure`);
+        }).bindPopup(`<b>🛡️ FloodGuard Hero Route</b><br>0 cm water exposure • 100% safe!`);
         layers.routes.addLayer(safeLine);
 
         // Turn-by-Turn Steps
@@ -463,12 +554,18 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderSteps(steps) {
     routeStepsList.innerHTML = '';
     if (!steps || steps.length === 0) {
-      routeStepsList.innerHTML = '<li class="empty-step">Select destination to view turn instructions.</li>';
+      routeStepsList.innerHTML = '<li class="empty-step">Pick your destination to see safe turn instructions!</li>';
       return;
     }
     steps.forEach((step, idx) => {
       const li = document.createElement('li');
-      li.innerHTML = `<strong>Step ${idx + 1}:</strong> ${step}`;
+      let icon = '🚗';
+      const sLower = step.toLowerCase();
+      if (sLower.includes('bridge') || sLower.includes('flyover')) icon = '🌉';
+      else if (sLower.includes('right')) icon = '➡️';
+      else if (sLower.includes('left')) icon = '⬅️';
+      else if (idx === steps.length - 1) icon = '🎉';
+      li.innerHTML = `<strong>${icon} Step ${idx + 1}:</strong> ${step}`;
       routeStepsList.appendChild(li);
     });
   }
@@ -525,37 +622,43 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ---------------------------------------------------------
-  // Event Listeners: City Input, Presets, Simulation, Demos
+  // Event Listeners: City Input, Presets, Simulation, Demos (Safely Guarded)
   // ---------------------------------------------------------
 
   // City Search Form submit
-  citySearchForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const val = cityInput.value;
-    if (val) loadCity(val);
-  });
+  if (citySearchForm) {
+    citySearchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = cityInput ? cityInput.value : '';
+      if (val) loadCity(val);
+    });
+  }
 
-  // Suggestion Chips
+  // Suggestion Chips (Major Indian Cities)
   document.querySelectorAll('.chip-btn').forEach(chip => {
     chip.addEventListener('click', () => {
       const cityName = chip.dataset.city;
-      cityInput.value = cityName;
+      if (cityInput) cityInput.value = cityName;
       loadCity(cityName);
     });
   });
 
   // "Change City" button
-  btnChangeCity.addEventListener('click', () => {
-    cityModal.classList.add('active');
-    cityLoadingStatus.style.display = 'none';
-    cityInput.focus();
-    cityInput.select();
-  });
+  if (btnChangeCity) {
+    btnChangeCity.addEventListener('click', () => {
+      if (cityModal) cityModal.classList.add('active');
+      if (cityLoadingStatus) cityLoadingStatus.style.display = 'none';
+      if (cityInput) {
+        cityInput.focus();
+        cityInput.select();
+      }
+    });
+  }
 
   // Routing controls
-  btnRecalculateRoute.addEventListener('click', calculateCityRoute);
-  selStartNode.addEventListener('change', calculateCityRoute);
-  selEndNode.addEventListener('change', calculateCityRoute);
+  if (btnRecalculateRoute) btnRecalculateRoute.addEventListener('click', calculateCityRoute);
+  if (selStartNode) selStartNode.addEventListener('change', calculateCityRoute);
+  if (selEndNode) selEndNode.addEventListener('change', calculateCityRoute);
 
   // Vehicle clearance picker
   document.querySelectorAll('.veh-btn').forEach(btn => {
@@ -570,57 +673,80 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Trip Presets for Active City
-  selPreset.addEventListener('change', (e) => {
-    if (!state.nodes || state.nodes.length === 0) return;
-    if (e.target.value === 'preset_transit_hospital') {
-      selStartNode.selectedIndex = 0;
-      if (state.facilities && state.facilities.length > 0) {
-        selEndNode.value = state.facilities[0].id;
+  if (selPreset) {
+    selPreset.addEventListener('change', (e) => {
+      if (!state.nodes || state.nodes.length === 0) return;
+      if (e.target.value === 'preset_transit_hospital') {
+        if (selStartNode) selStartNode.selectedIndex = 0;
+        if (selEndNode) {
+          if (state.facilities && state.facilities.length > 0) {
+            selEndNode.value = state.facilities[0].id;
+          } else {
+            selEndNode.selectedIndex = state.nodes.length - 1;
+          }
+        }
       } else {
-        selEndNode.selectedIndex = state.nodes.length - 1;
+        if (selStartNode) selStartNode.selectedIndex = Math.min(1, state.nodes.length - 1);
+        if (selEndNode) selEndNode.selectedIndex = Math.max(0, state.nodes.length - 2);
       }
-    } else {
-      selStartNode.selectedIndex = Math.min(1, state.nodes.length - 1);
-      selEndNode.selectedIndex = Math.max(0, state.nodes.length - 2);
-    }
-    calculateCityRoute();
-  });
+      calculateCityRoute();
+    });
+  }
 
   // Rain Simulator Slider
-  rngRain.addEventListener('input', (e) => {
-    lblRainVal.textContent = `${e.target.value} mm/hr`;
-  });
-  rngPump.addEventListener('input', (e) => {
-    lblPumpVal.textContent = `${e.target.value}% Operational`;
-  });
+  if (rngRain) {
+    rngRain.addEventListener('input', (e) => {
+      if (lblRainVal) lblRainVal.textContent = `${e.target.value} mm/hr`;
+    });
+  }
+  if (rngPump) {
+    rngPump.addEventListener('input', (e) => {
+      if (lblPumpVal) lblPumpVal.textContent = `${e.target.value}% Operational`;
+    });
+  }
 
-  btnRunSim.addEventListener('click', () => {
-    if (!state.activeCity) return;
-    loadCity(state.activeCity.city_name, parseFloat(rngRain.value), parseFloat(rngPump.value));
-  });
+  if (btnRunSim) {
+    btnRunSim.addEventListener('click', () => {
+      if (!state.activeCity) return;
+      const rain = rngRain ? parseFloat(rngRain.value) : 15.0;
+      const pump = rngPump ? parseFloat(rngPump.value) : 100.0;
+      loadCity(state.activeCity.city_name, rain, pump);
+    });
+  }
 
   // Demo Scenarios
-  btnCalm.addEventListener('click', () => {
-    btnCalm.classList.add('active');
-    btnStorm.classList.remove('active');
-    btnSolution.classList.remove('active');
-    if (state.activeCity) loadCity(state.activeCity.city_name, 0.0);
-  });
+  if (btnCalm) {
+    btnCalm.addEventListener('click', () => {
+      btnCalm.classList.add('active');
+      if (btnStorm) btnStorm.classList.remove('active');
+      if (btnSolution) btnSolution.classList.remove('active');
+      const promptBox = document.getElementById('stormPromptBox');
+      if (promptBox) promptBox.style.display = 'none';
+      if (state.activeCity) loadCity(state.activeCity.city_name, 0.0, 100.0, true);
+    });
+  }
 
-  btnStorm.addEventListener('click', () => {
-    btnStorm.classList.add('active');
-    btnCalm.classList.remove('active');
-    btnSolution.classList.remove('active');
-    if (state.activeCity) loadCity(state.activeCity.city_name, 65.0);
-  });
+  if (btnStorm) {
+    btnStorm.addEventListener('click', () => {
+      btnStorm.classList.add('active');
+      if (btnCalm) btnCalm.classList.remove('active');
+      if (btnSolution) btnSolution.classList.remove('active');
+      if (state.activeCity) {
+        // In Rain Storm mode: do NOT directly show route! First ask for start and end point:
+        loadCity(state.activeCity.city_name, 65.0, 100.0, false);
+      }
+    });
+  }
 
-  btnSolution.addEventListener('click', () => {
-    btnSolution.classList.add('active');
-    btnCalm.classList.remove('active');
-    btnStorm.classList.remove('active');
-    switchTab('nav');
-    calculateCityRoute();
-  });
+  if (btnSolution) {
+    btnSolution.addEventListener('click', () => {
+      btnSolution.classList.add('active');
+      if (btnCalm) btnCalm.classList.remove('active');
+      if (btnStorm) btnStorm.classList.remove('active');
+      switchTab('nav');
+      calculateCityRoute();
+    });
+  }
 
   // Tab Navigation
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -636,26 +762,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabBtn = document.querySelector(`.tab-btn[data-tab="${tabKey}"]`);
     if (tabBtn) tabBtn.classList.add('active');
 
-    if (tabKey === 'nav') document.getElementById('tabNav').classList.add('active');
-    if (tabKey === 'sim') document.getElementById('tabSim').classList.add('active');
-    if (tabKey === 'facilities') document.getElementById('tabFacilities').classList.add('active');
+    if (tabKey === 'nav') {
+      const p = document.getElementById('tabNav');
+      if (p) p.classList.add('active');
+    }
+    if (tabKey === 'sim') {
+      const p = document.getElementById('tabSim');
+      if (p) p.classList.add('active');
+    }
+    if (tabKey === 'facilities') {
+      const p = document.getElementById('tabFacilities');
+      if (p) p.classList.add('active');
+    }
   }
 
   // Layer Visibility Checkboxes
-  document.getElementById('chkFloodZones').addEventListener('change', (e) => {
-    if (e.target.checked) map.addLayer(layers.floodZones);
-    else map.removeLayer(layers.floodZones);
-  });
-  document.getElementById('chkHospitals').addEventListener('change', (e) => {
-    if (e.target.checked) map.addLayer(layers.facilities);
-    else map.removeLayer(layers.facilities);
-  });
-  document.getElementById('chkRoutes').addEventListener('change', (e) => {
-    if (e.target.checked) map.addLayer(layers.routes);
-    else map.removeLayer(layers.routes);
-  });
+  const chkFloodZones = document.getElementById('chkFloodZones');
+  if (chkFloodZones) {
+    chkFloodZones.addEventListener('change', (e) => {
+      if (e.target.checked) map.addLayer(layers.floodZones);
+      else map.removeLayer(layers.floodZones);
+    });
+  }
+  const chkHospitals = document.getElementById('chkHospitals');
+  if (chkHospitals) {
+    chkHospitals.addEventListener('change', (e) => {
+      if (e.target.checked) map.addLayer(layers.facilities);
+      else map.removeLayer(layers.facilities);
+    });
+  }
+  const chkRoutes = document.getElementById('chkRoutes');
+  if (chkRoutes) {
+    chkRoutes.addEventListener('change', (e) => {
+      if (e.target.checked) map.addLayer(layers.routes);
+      else map.removeLayer(layers.routes);
+    });
+  }
 
   // Startup: On launch, do NOT render any other city. Show city prompt upfront.
-  cityModal.classList.add('active');
-  cityInput.focus();
+  if (cityModal) {
+    cityModal.classList.add('active');
+    if (cityInput) cityInput.focus();
+  }
 });
