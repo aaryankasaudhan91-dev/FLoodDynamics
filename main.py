@@ -30,12 +30,14 @@ from engine.phase1_ingestion import (
     FallbackHierarchyEngine
 )
 from engine.phase2_routes import router as phase2_router
+from engine.phase4_routes import router as phase4_router
 
 app = FastAPI(
     title="FloodGuard IFPS API",
     description="Real-time urban flood nowcasting and emergency routing engine for South-Central Mumbai"
 )
 app.include_router(phase2_router)
+app.include_router(phase4_router)
 
 # Core solvers and telemetry ingestion engines
 cwc_engine = CWCIndiaWRISEngine()
