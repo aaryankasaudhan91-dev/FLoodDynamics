@@ -18,4 +18,9 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
-tools
+
+# Agent rules, skills & tools (local only)
+tools/
+.agents/
+AGENTS.md
+GEMINI.md
