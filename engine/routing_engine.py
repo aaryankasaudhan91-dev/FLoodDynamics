@@ -7,7 +7,7 @@ from .neighborhood_data import NODES, EDGES
 # - Ambulance: 15cm max (low floor + exhaust pipe water ingress stalls engine)
 # - Standard Car/Taxi: 15cm max (risk of electrical short & catalytic converter thermal shock)
 # - NDRF / Fire Heavy Rescue: 50cm (elevated snorkel air intake & high differentials)
-# - Pedestrian: 12cm (crucial: BMC opens storm manholes during floods; high risk of falling in)
+# - Pedestrian: 12cm (critical: BMC opens storm manholes during floods; high risk of falling in)
 VEHICLES = {
     "ambulance": {
         "name": "Emergency Ambulance",

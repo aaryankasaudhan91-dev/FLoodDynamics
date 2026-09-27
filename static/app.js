@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchSimulation(rain, tide, pump) {
     try {
-      const res = await fetch('/api/simulate', {
+      const simResponse = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -116,11 +116,14 @@ document.addEventListener('DOMContentLoaded', () => {
           pump_pct: parseFloat(pump)
         })
       });
+      if (!simResponse.ok) {
+        throw new Error(`Simulation request failed: HTTP ${simResponse.status}`);
+      }
 
-      const data = await res.json();
-      state.currentSim = data;
-      updateSimulationUI(data);
-      return data;
+      const simResult = await simResponse.json();
+      state.currentSim = simResult;
+      updateSimulationUI(simResult);
+      return simResult;
     } catch (err) {
       console.error('Simulation error:', err);
     }
@@ -207,10 +210,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchFacilities() {
     try {
-      const res = await fetch('/api/facilities');
-      const data = await res.json();
-      state.facilities = data;
-      renderFacilities(data);
+      const facilitiesResponse = await fetch('/api/facilities');
+      if (!facilitiesResponse.ok) {
+        throw new Error(`Facilities request failed: HTTP ${facilitiesResponse.status}`);
+      }
+      const facilitiesPayload = await facilitiesResponse.json();
+      state.facilities = facilitiesPayload;
+      renderFacilities(facilitiesPayload);
     } catch (err) {
       console.error('Facilities error:', err);
     }
@@ -273,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRecalculateRoute.textContent = 'Calculating route...';
 
     try {
-      const res = await fetch('/api/route', {
+      const routeResponse = await fetch('/api/route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,12 +288,15 @@ document.addEventListener('DOMContentLoaded', () => {
           vehicle_type: state.selectedVehicle
         })
       });
+      if (!routeResponse.ok) {
+        throw new Error(`Routing request failed: HTTP ${routeResponse.status}`);
+      }
 
-      const data = await res.json();
-      state.currentRoutes = data;
-      renderRoutes(data);
+      const routeResult = await routeResponse.json();
+      state.currentRoutes = routeResult;
+      renderRoutes(routeResult);
     } catch (err) {
-      console.error('Route error:', err);
+      console.error('Route calculation error:', err);
     } finally {
       btnRecalculateRoute.textContent = 'Calculate Flood-Safe Route';
     }
@@ -367,9 +376,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchTelemetry() {
     try {
-      const res = await fetch('/api/telemetry');
-      const data = await res.json();
-      renderChart(data);
+      const telemetryResponse = await fetch('/api/telemetry');
+      if (!telemetryResponse.ok) {
+        throw new Error(`Telemetry request failed: HTTP ${telemetryResponse.status}`);
+      }
+      const telemetryPayload = await telemetryResponse.json();
+      renderChart(telemetryPayload);
     } catch (err) {
       console.error('Telemetry error:', err);
     }
@@ -500,16 +512,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   selPreset.addEventListener('change', (e) => {
-    const val = e.target.value;
-    if (val === 'ambulance_kem') {
+    const presetKey = e.target.value;
+    if (presetKey === 'ambulance_kem') {
       selStartNode.value = 'dadar_tt_circle';
       selEndNode.value = 'kem_hospital_gate';
       setVehicle('ambulance');
-    } else if (val === 'commuter_parel') {
+    } else if (presetKey === 'commuter_parel') {
       selStartNode.value = 'kings_circle';
       selEndNode.value = 'parel_tt';
       setVehicle('car');
-    } else if (val === 'evac_khalsa') {
+    } else if (presetKey === 'evac_khalsa') {
       selStartNode.value = 'hindmata_junction';
       selEndNode.value = 'wadala_bridge';
       setVehicle('pedestrian');

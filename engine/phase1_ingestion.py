@@ -135,21 +135,21 @@ class CWCIndiaWRISEngine:
         }
 
     def get_reservoir_status(self, code: str = "RES_VIHAR_MUMBAI") -> dict:
-        res = self.reservoirs.get(code, self.reservoirs["RES_VIHAR_MUMBAI"])
+        lake_telemetry = self.reservoirs.get(code, self.reservoirs["RES_VIHAR_MUMBAI"])
         return {
             "agency": "CWC",
             "reservoir_code": code,
-            "name": res["name"],
+            "name": lake_telemetry["name"],
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "storage_metrics": {
-                "full_reservoir_level_frl_m": res["frl"],
-                "maximum_water_level_mwl_m": res["mwl"],
-                "current_water_level_m": res["level"],
-                "gross_storage_capacity_bcm": res["gross_bcm"],
-                "current_live_storage_bcm": res["live_bcm"],
-                "storage_capacity_utilization_pct": res["util"],
-                "inflow_cumecs": res["inflow"],
-                "spillway_outflow_cumecs": res["outflow"]
+                "full_reservoir_level_frl_m": lake_telemetry["frl"],
+                "maximum_water_level_mwl_m": lake_telemetry["mwl"],
+                "current_water_level_m": lake_telemetry["level"],
+                "gross_storage_capacity_bcm": lake_telemetry["gross_bcm"],
+                "current_live_storage_bcm": lake_telemetry["live_bcm"],
+                "storage_capacity_utilization_pct": lake_telemetry["util"],
+                "inflow_cumecs": lake_telemetry["inflow"],
+                "spillway_outflow_cumecs": lake_telemetry["outflow"]
             }
         }
 
@@ -233,23 +233,25 @@ class IMDWeatherEngine:
 
     def get_live_rainfall(self) -> dict:
         try:
-            import urllib.request, json
-            # Real live Mumbai meteorological feed (Santacruz/Bandra-Kurla grid)
+            import urllib.request
+            import urllib.error
+            import json
+            # Live Mumbai meteorological feed (Santacruz/Bandra-Kurla grid)
             url = "https://api.open-meteo.com/v1/forecast?latitude=19.076&longitude=72.877&current=precipitation,rain,weather_code,wind_speed_10m"
             req = urllib.request.Request(url, headers={"User-Agent": "FloodGuard/1.0"})
             with urllib.request.urlopen(req, timeout=3) as resp:
-                data = json.loads(resp.read().decode())
-                cur = data.get("current", {})
-                r = float(cur.get("precipitation", 0.0) or cur.get("rain", 0.0))
-                w = float(cur.get("wind_speed_10m", 0.0))
+                weather_payload = json.loads(resp.read().decode())
+                cur_condition = weather_payload.get("current", {})
+                rainfall_rate_mm = float(cur_condition.get("precipitation", 0.0) or cur_condition.get("rain", 0.0))
+                wind_speed_kmph = float(cur_condition.get("wind_speed_10m", 0.0))
                 return {
                     "online": True,
-                    "rain_mm_hr": r,
-                    "wind_kmph": w,
+                    "rain_mm_hr": rainfall_rate_mm,
+                    "wind_kmph": wind_speed_kmph,
                     "source": "Live IMD/WMO AWS Feed (Mumbai Grid 19.08N, 72.85E)",
-                    "timestamp": cur.get("time")
+                    "timestamp": cur_condition.get("time")
                 }
-        except Exception as err:
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError) as err:
             return {"online": False, "error": str(err), "rain_mm_hr": 0.0}
 
 

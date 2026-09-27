@@ -137,20 +137,20 @@ class HydraulicModel:
         facility_status = []
         for fac in self.services:
             matched = next((n for n in node_results if n["id"] == fac["near_node"]), None)
-            d = matched["depth_cm"] if matched else 0.0
-            item = dict(fac)
-            item["water_depth_cm"] = d
+            inundation_cm = matched["depth_cm"] if matched else 0.0
+            service_entry = dict(fac)
+            service_entry["water_depth_cm"] = inundation_cm
 
-            if d >= 45.0:
-                item["alert_level"] = "CRITICAL"
-                item["message"] = f"Gate access submerged under {d:.0f}cm water. Divert via elevated Tilak Flyover."
-            elif d >= 15.0:
-                item["alert_level"] = "WARNING"
-                item["message"] = f"Water ponding at {d:.0f}cm outside gate. Accessible by high-clearance vehicles only."
+            if inundation_cm >= 45.0:
+                service_entry["alert_level"] = "CRITICAL"
+                service_entry["message"] = f"Gate access submerged under {inundation_cm:.0f}cm water. Divert via elevated Tilak Flyover."
+            elif inundation_cm >= 15.0:
+                service_entry["alert_level"] = "WARNING"
+                service_entry["message"] = f"Water ponding at {inundation_cm:.0f}cm outside gate. Accessible by high-clearance vehicles only."
             else:
-                item["alert_level"] = "NORMAL"
-                item["message"] = "Approach roads dry and clear for patient transit."
-            facility_status.append(item)
+                service_entry["alert_level"] = "NORMAL"
+                service_entry["message"] = "Approach roads dry and clear for patient transit."
+            facility_status.append(service_entry)
 
         # 6. Global mass conservation audit (NHP Standard: Relative Mass Error <= 1.0%)
         mass_audit = HydrographSignalAnalyzer.mass_balance_rme(

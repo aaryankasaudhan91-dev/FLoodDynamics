@@ -96,7 +96,9 @@ def get_weather():
 
     if OPENWEATHER_API_KEY:
         try:
-            import urllib.request, json
+            import urllib.request
+            import urllib.error
+            import json
             # Dadar coordinate query (19.014N, 72.843E)
             url = f"https://api.openweathermap.org/data/2.5/weather?lat=19.014&lon=72.843&appid={OPENWEATHER_API_KEY}&units=metric"
             req = urllib.request.Request(url, headers={"User-Agent": "FloodGuard/1.0"})
@@ -105,8 +107,8 @@ def get_weather():
                 if "rain" in payload and "1h" in payload["rain"]:
                     rain_rate = float(payload["rain"]["1h"])
                 source = f"Live OpenWeatherMap ({payload.get('weather', [{}])[0].get('description', 'Rain')})"
-        except Exception as err:
-            log.warning(f"OpenWeather query timeout, falling back to radar: {err}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError) as err:
+            log.warning(f"OpenWeather query failed, falling back to radar: {err}")
     else:
         # Real live IMD AWS / WMO meteorological feed for Mumbai
         live_feed = imd_engine.get_live_rainfall()
@@ -124,12 +126,12 @@ def get_weather():
     }
 
 @app.post("/api/simulate")
-def run_simulation(data: SimInput):
+def run_simulation(sim_payload: SimInput):
     global current_sim
     current_sim = hydraulic_solver.simulate(
-        rain_intensity_mm_hr=data.rain_mm_hr,
-        tide_level_m=data.tide_m,
-        pump_power_pct=data.pump_pct
+        rain_intensity_mm_hr=sim_payload.rain_mm_hr,
+        tide_level_m=sim_payload.tide_m,
+        pump_power_pct=sim_payload.pump_pct
     )
     return current_sim
 
@@ -141,17 +143,17 @@ def get_hazards():
     }
 
 @app.post("/api/route")
-def get_route(data: RouteInput):
+def get_route(route_req: RouteInput):
     global current_sim
-    if data.rain_mm_hr is not None:
+    if route_req.rain_mm_hr is not None:
         current_sim = hydraulic_solver.simulate(
-            rain_intensity_mm_hr=data.rain_mm_hr,
-            tide_level_m=data.tide_m if data.tide_m is not None else current_sim["params"]["tide_m"],
-            pump_power_pct=data.pump_pct if data.pump_pct is not None else current_sim["params"]["pump_pct"]
+            rain_intensity_mm_hr=route_req.rain_mm_hr,
+            tide_level_m=route_req.tide_m if route_req.tide_m is not None else current_sim["params"]["tide_m"],
+            pump_power_pct=route_req.pump_pct if route_req.pump_pct is not None else current_sim["params"]["pump_pct"]
         )
 
     depth_lookup = {n["id"]: n["depth_cm"] for n in current_sim["nodes"]}
-    return navigation_router.find_routes(data.start_node, data.end_node, depth_lookup, data.vehicle_type)
+    return navigation_router.find_routes(route_req.start_node, route_req.end_node, depth_lookup, route_req.vehicle_type)
 
 @app.get("/api/nodes")
 def get_nodes():
@@ -200,18 +202,18 @@ def get_imd_nowcast():
     return imd_engine.get_nowcast_alert(cur_rain)
 
 @app.post("/api/v1/imd/radar-transform")
-def convert_radar_reflectivity(data: RadarConvertInput):
-    r_calc = imd_engine.marshall_palmer_inversion(data.dbz, data.regime)
-    return {"dbz": data.dbz, "regime": data.regime, "rain_rate_mm_hr": r_calc}
+def convert_radar_reflectivity(radar_req: RadarConvertInput):
+    r_calc = imd_engine.marshall_palmer_inversion(radar_req.dbz, radar_req.regime)
+    return {"dbz": radar_req.dbz, "regime": radar_req.regime, "rain_rate_mm_hr": r_calc}
 
 @app.post("/api/v1/imd/clutter-filter")
-def filter_radar_clutter(data: ClutterFilterInput):
-    is_clutter, reason = imd_engine.is_ground_clutter(data.dbz, data.velocity_m_s, data.rho_hv)
+def filter_radar_clutter(clutter_req: ClutterFilterInput):
+    is_clutter, reason = imd_engine.is_ground_clutter(clutter_req.dbz, clutter_req.velocity_m_s, clutter_req.rho_hv)
     return {"is_clutter": is_clutter, "reason": reason}
 
 @app.post("/api/v1/bhuvan/hydro-condition")
-def condition_dem(data: HydroConditionInput):
-    return bhuvan_engine.hydro_condition(data.grid, data.stream_mask, data.burn_depth)
+def condition_dem(dem_req: HydroConditionInput):
+    return bhuvan_engine.hydro_condition(dem_req.grid, dem_req.stream_mask, dem_req.burn_depth)
 
 @app.get("/api/v1/soi/cors-calibrate")
 def calibrate_cors(h_wgs84: float = 10.0):
@@ -235,18 +237,18 @@ def get_scada_telemetry():
     return scada_engine.get_drain_readings(r_val, t_val)
 
 @app.post("/api/v1/qc/validate")
-def validate_sensor_reading(data: QCValidateInput):
+def validate_sensor_reading(qc_req: QCValidateInput):
     checks = {}
-    if data.rainfall_mm_hr is not None:
-        ok, msg = qc_engine.check_rainfall(data.rainfall_mm_hr)
+    if qc_req.rainfall_mm_hr is not None:
+        ok, msg = qc_engine.check_rainfall(qc_req.rainfall_mm_hr)
         checks["rainfall_qc"] = {"valid": ok, "message": msg}
 
-    if data.stage_m is not None:
-        ok, msg = qc_engine.check_stage(data.station, data.stage_m)
+    if qc_req.stage_m is not None:
+        ok, msg = qc_engine.check_stage(qc_req.station, qc_req.stage_m)
         checks["stage_qc"] = {"valid": ok, "message": msg}
 
-    if data.neighbors is not None and data.stage_m is not None:
-        ok, msg = qc_engine.check_spatial_zscore(data.stage_m, data.neighbors)
+    if qc_req.neighbors is not None and qc_req.stage_m is not None:
+        ok, msg = qc_engine.check_spatial_zscore(qc_req.stage_m, qc_req.neighbors)
         checks["spatial_qc"] = {"valid": ok, "message": msg}
 
     return checks
@@ -267,16 +269,17 @@ def get_pipeline_status():
     }
 
 @app.post("/api/v1/pipeline/fallback-tier")
-def switch_fallback_tier(data: FallbackInput):
-    return fallback_engine.set_tier(data.tier)
+def switch_fallback_tier(tier_req: FallbackInput):
+    return fallback_engine.set_tier(tier_req.tier)
 
 @app.get("/api/v1/db/schema")
 def get_db_schema():
     schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine", "db_schema.sql")
-    if os.path.exists(schema_path):
+    try:
         with open(schema_path, "r", encoding="utf-8") as f:
             return {"schema": f.read()}
-    return {"error": "Schema file not found"}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Database schema file not found")
 
 STATIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")

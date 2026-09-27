@@ -61,85 +61,85 @@ class RecessionInput(BaseModel):
     elapsed_hours: float = 3.5
 
 @router.post("/preissmann-conduit")
-def evaluate_preissmann_conduit(data: PreissmannInput):
+def evaluate_preissmann_conduit(pipe_params: PreissmannInput):
     pipe = PreissmannSlotPipe(
-        diameter_m=data.diameter_m,
-        slope=data.slope,
-        manning_n=data.manning_n
+        diameter_m=pipe_params.diameter_m,
+        slope=pipe_params.slope,
+        manning_n=pipe_params.manning_n
     )
     return pipe.compute_discharge(
-        stage_y=data.stage_y,
-        backwater_head_m=data.backwater_head_m
+        stage_y=pipe_params.stage_y,
+        backwater_head_m=pipe_params.backwater_head_m
     )
 
 @router.post("/inlet-exchange")
-def evaluate_inlet_exchange(data: ExchangeInput):
+def evaluate_inlet_exchange(exchange_params: ExchangeInput):
     return coupling_model.compute_exchange(
-        h_2d=data.h_2d,
-        h_1d=data.h_1d,
-        z_ground=data.z_ground
+        h_2d=exchange_params.h_2d,
+        h_1d=exchange_params.h_1d,
+        z_ground=exchange_params.z_ground
     )
 
 @router.post("/lateral-overtopping")
-def evaluate_lateral_overtopping(data: LateralOvertoppingInput):
+def evaluate_lateral_overtopping(spill_params: LateralOvertoppingInput):
     return coupling_model.lateral_nallah_overtopping(
-        h_nallah=data.h_nallah,
-        z_bank=data.z_bank,
-        h_2d=data.h_2d,
-        z_ground=data.z_ground,
-        bank_len_m=data.bank_len_m
+        h_nallah=spill_params.h_nallah,
+        z_bank=spill_params.z_bank,
+        h_2d=spill_params.h_2d,
+        z_ground=spill_params.z_ground,
+        bank_len_m=spill_params.bank_len_m
     )
 
 @router.post("/dynamic-roughness")
-def evaluate_dynamic_roughness(data: DynamicRoughnessInput):
+def evaluate_dynamic_roughness(roughness_params: DynamicRoughnessInput):
     return roughness_model.calculate(
-        flow_depth_y=data.flow_depth_y,
-        silt_depth_m=data.silt_depth_m,
-        trash_area_sqm=data.trash_area_sqm,
-        q_actual=data.q_actual
+        flow_depth_y=roughness_params.flow_depth_y,
+        silt_depth_m=roughness_params.silt_depth_m,
+        trash_area_sqm=roughness_params.trash_area_sqm,
+        q_actual=roughness_params.q_actual
     )
 
 @router.post("/tidal-boundary")
-def evaluate_tidal_boundary(data: TidalBoundaryInput):
+def evaluate_tidal_boundary(tidal_params: TidalBoundaryInput):
     twl = tidal_model.compute_twl(
-        hours_from_epoch=data.hours_from_epoch,
-        surge_anomaly_m=data.surge_anomaly_m
+        hours_from_epoch=tidal_params.hours_from_epoch,
+        surge_anomaly_m=tidal_params.surge_anomaly_m
     )
     gate_eval = tidal_model.evaluate_outfall_gate(
-        internal_nallah_head=data.internal_nallah_head,
+        internal_nallah_head=tidal_params.internal_nallah_head,
         twl_ocean=twl,
-        has_flap_gate=data.has_flap_gate
+        has_flap_gate=tidal_params.has_flap_gate
     )
     return {
         "ocean_twl_m": twl,
-        "hours_from_epoch": data.hours_from_epoch,
-        "surge_anomaly_m": data.surge_anomaly_m,
+        "hours_from_epoch": tidal_params.hours_from_epoch,
+        "surge_anomaly_m": tidal_params.surge_anomaly_m,
         "outfall_gate": gate_eval
     }
 
 @router.post("/mass-conservation-audit")
-def audit_mass_conservation(data: MassAuditInput):
+def audit_mass_conservation(audit_params: MassAuditInput):
     return HydrographSignalAnalyzer.mass_balance_rme(
-        inflow_m3=data.inflow_m3,
-        outflow_m3=data.outflow_m3,
-        storage_change_m3=data.storage_change_m3
+        inflow_m3=audit_params.inflow_m3,
+        outflow_m3=audit_params.outflow_m3,
+        storage_change_m3=audit_params.storage_change_m3
     )
 
 @router.post("/rate-of-rise")
-def evaluate_rate_of_rise(data: RateOfRiseInput):
-    return HydrographSignalAnalyzer.rate_of_rise(data.stage_series)
+def evaluate_rate_of_rise(rise_params: RateOfRiseInput):
+    return HydrographSignalAnalyzer.rate_of_rise(rise_params.stage_series)
 
 @router.post("/recession-constant")
-def evaluate_recession(data: RecessionInput):
+def evaluate_recession(recession_params: RecessionInput):
     tau = HydrographSignalAnalyzer.calculate_recession_tau(
-        peak_stage=data.peak_stage,
-        current_stage=data.current_stage,
-        elapsed_hours=data.elapsed_hours
+        peak_stage=recession_params.peak_stage,
+        current_stage=recession_params.current_stage,
+        elapsed_hours=recession_params.elapsed_hours
     )
     return {
-        "peak_stage_m": data.peak_stage,
-        "current_stage_m": data.current_stage,
-        "elapsed_hours": data.elapsed_hours,
+        "peak_stage_m": recession_params.peak_stage,
+        "current_stage_m": recession_params.current_stage,
+        "elapsed_hours": recession_params.elapsed_hours,
         "recession_time_constant_tau_hr": tau,
         "drainage_speed": "FAST" if tau <= 4.0 else ("NORMAL" if tau <= 8.0 else "CHRONIC_BLOCKAGE_ALERT")
     }
