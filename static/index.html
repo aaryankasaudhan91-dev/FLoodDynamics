@@ -16,12 +16,65 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- Chart.js for River Stage -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <link rel="stylesheet" href="/static/styles.css?v=3.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>    <link rel="stylesheet" href="/static/styles.css?v=3.0">
 </head>
 <body>
-  <!-- Full Screen Main Layout (No Top Navbar) -->
+  <!-- Upfront City Selection Modal (Prompts User on Launch) -->
+  <div id="cityModal" class="modal-overlay active">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon">🌊</div>
+        <div class="modal-titles">
+          <h2>FloodGuard Real-Time City Navigation</h2>
+          <p>Live urban flood nowcasting, digital elevation model (DEM), and safe routing for any city in the world.</p>
+        </div>
+      </div>
+
+      <form id="citySearchForm" class="city-form">
+        <div class="input-with-button">
+          <input 
+            type="text" 
+            id="cityInput" 
+            class="city-search-input" 
+            placeholder="Type city name (e.g. Bengaluru, Mumbai, Delhi, London, New York...)" 
+            autocomplete="off" 
+            required 
+            autofocus
+          >
+          <button type="submit" id="btnSubmitCity" class="primary-btn submit-city-btn">
+            <span>Explore City</span>
+          </button>
+        </div>
+      </form>
+
+      <div class="preset-section">
+        <span class="preset-label">Quick Suggestions:</span>
+        <div class="city-chips">
+          <button type="button" class="chip-btn" data-city="Bengaluru">Bengaluru</button>
+          <button type="button" class="chip-btn" data-city="Mumbai">Mumbai</button>
+          <button type="button" class="chip-btn" data-city="Delhi">Delhi</button>
+          <button type="button" class="chip-btn" data-city="Chennai">Chennai</button>
+          <button type="button" class="chip-btn" data-city="Hyderabad">Hyderabad</button>
+          <button type="button" class="chip-btn" data-city="London">London</button>
+          <button type="button" class="chip-btn" data-city="New York">New York</button>
+          <button type="button" class="chip-btn" data-city="Tokyo">Tokyo</button>
+        </div>
+      </div>
+
+      <!-- Real-time Ingestion Progress Checklist -->
+      <div id="cityLoadingStatus" class="loading-status-box" style="display: none;">
+        <div class="status-spinner-row">
+          <div class="spinner"></div>
+          <span id="loadingStepText" class="loading-step-text">Geocoding administrative boundary from OpenStreetMap...</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div id="loadingProgressBar" class="progress-bar-fill" style="width: 20%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Screen Main Layout -->
   <div class="main-layout">
     <!-- Map Area -->
     <div class="map-wrap">
@@ -30,7 +83,7 @@
       <!-- Live Alert Banner across map top -->
       <div id="alertBanner" class="alert-banner normal">
         <span id="alertIcon">✓</span>
-        <span id="alertMsg">Standard traffic conditions. Hindmata and surrounding underpasses are dry.</span>
+        <span id="alertMsg">Select or confirm a city to initialize real-time telemetry.</span>
       </div>
 
       <!-- Map Floating Controls & Legend -->
@@ -51,24 +104,26 @@
 
     <!-- Right Minimalist Sidebar -->
     <aside class="sidebar">
-      <!-- Integrated Clean Brand & Demo Header inside Sidebar -->
+      <!-- Integrated Clean Brand Header inside Sidebar -->
       <div class="sidebar-header">
         <div class="brand-row">
           <div class="brand-title">FloodGuard</div>
-          <div class="brand-badge">Mumbai Central</div>
+          <div class="brand-badge-wrap">
+            <span id="cityBadge" class="brand-badge">Select City</span>
+            <button id="btnChangeCity" class="change-city-btn" title="Switch to another city">Change City</button>
+          </div>
         </div>
         <div class="weather-row">
-          <span class="w-item">Rain: <strong id="navRainVal">12 mm/hr</strong></span>
+          <span class="w-item">Rain: <strong id="navRainVal">-- mm/hr</strong></span>
           <span class="w-divider">•</span>
-          <span class="w-item">Tide: <strong id="navTideVal">2.0 m</strong></span>
+          <span class="w-item">Temp: <strong id="navTempVal">-- °C</strong></span>
           <span class="w-divider">•</span>
-          <span class="w-item">Mithi: <strong id="navRiverVal" class="text-green">Normal</strong></span>
+          <span class="w-item">Status: <strong id="navRiverVal" class="text-green">Ready</strong></span>
         </div>
         <!-- 3 Demo Flow Buttons -->
         <div class="demo-pills">
-          <button id="btnCalm" class="demo-btn active">1. Normal Day</button>
-          <button id="btnStorm" class="demo-btn">2. Downpour</button>
-          <button id="btnSolution" class="demo-btn">3. Safe Route</button>
+          <button id="btnCalm" class="demo-btn active">1. Live / Normal</button>
+          <button id="btnStorm" class="demo-btn">2. Heavy Rain</button>
         </div>
       </div>
 
@@ -88,9 +143,8 @@
           <div class="form-group">
             <label>Trip Preset</label>
             <select id="selPreset" class="input-select">
-              <option value="ambulance_kem">Ambulance: Dadar TT to KEM Hospital</option>
-              <option value="commuter_parel">Commuter: King's Circle to Parel TT</option>
-              <option value="evac_khalsa">Evacuation: Hindmata to Khalsa Shelter</option>
+              <option value="preset_transit_hospital">Transit Hub to Central Emergency Hospital</option>
+              <option value="preset_cross_city">Cross-City Arterial to Regional Care Center</option>
             </select>
           </div>
 
@@ -203,7 +257,7 @@
         </div>
 
         <div class="card-section">
-          <h4>Mithi River Water Level Telemetry</h4>
+          <h4 id="riverTitle">City Hydrodynamic Telemetry</h4>
           <div class="chart-container">
             <canvas id="riverChart"></canvas>
           </div>

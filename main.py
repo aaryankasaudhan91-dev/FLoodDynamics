@@ -19,6 +19,7 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 from engine.spatial_data import NODES, HOSPITALS_AND_SERVICES, DB_SCHEMA_SQL
 from engine.hydrodynamics import HydraulicModel, phase2_router
 from engine.navigation import FloodRouter, VEHICLES, phase4_router
+from engine.city_service import CityService
 from engine.telemetry import (
     CWCIndiaWRISEngine,
     IMDWeatherEngine,
@@ -49,6 +50,7 @@ fallback_engine = FallbackHierarchyEngine()
 
 hydraulic_solver = HydraulicModel()
 navigation_router = FloodRouter()
+city_service = CityService()
 
 # Baseline monsoon state: 12 mm/hr moderate rain, 2.0m mid-tide
 current_sim = hydraulic_solver.simulate(rain_intensity_mm_hr=12.0, tide_level_m=2.0)
@@ -88,6 +90,53 @@ class HydroConditionInput(BaseModel):
     grid: List[List[float]]
     stream_mask: Optional[List[List[bool]]] = None
     burn_depth: float = 1.2
+
+class CityLiveInput(BaseModel):
+    city: str
+    rain_mm_hr: Optional[float] = None
+    pump_pct: Optional[float] = 100.0
+
+class CityRouteInput(BaseModel):
+    city: Optional[str] = None
+    start_lat: float
+    start_lon: float
+    end_lat: float
+    end_lon: float
+    vehicle_type: str = "ambulance"
+
+@app.get("/api/city/live")
+def get_city_live(city: str, rain_mm_hr: Optional[float] = None, pump_pct: float = 100.0):
+    try:
+        return city_service.get_city_data(city, rain_override=rain_mm_hr, pump_pct=pump_pct)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        log.error(f"Error fetching live city data for {city}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to query real-time city data")
+
+@app.post("/api/city/live")
+def post_city_live(req: CityLiveInput):
+    try:
+        return city_service.get_city_data(req.city, rain_override=req.rain_mm_hr, pump_pct=req.pump_pct or 100.0)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        log.error(f"Error fetching live city data for {req.city}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to query real-time city data")
+
+@app.post("/api/city/route")
+def post_city_route(req: CityRouteInput):
+    avoid_nodes = []
+    if city_service.active_city:
+        avoid_nodes = city_service.active_city.get("nodes", [])
+    return city_service.calculate_live_osrm_route(
+        start_lat=req.start_lat,
+        start_lon=req.start_lon,
+        end_lat=req.end_lat,
+        end_lon=req.end_lon,
+        vehicle_type=req.vehicle_type,
+        avoid_nodes=avoid_nodes
+    )
 
 @app.get("/api/weather")
 def get_weather():
