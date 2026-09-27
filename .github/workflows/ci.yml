@@ -31,3 +31,6 @@ jobs:
 
     - name: Run Phase 2 Hydrodynamic Engine Tests
       run: python test_phase2.py
+
+    - name: Run Phase 4 Smart Navigation API Tests
+      run: python test_phase4.py
