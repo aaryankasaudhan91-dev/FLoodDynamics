@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FloodGuard — Urban Flood Nowcasting & Safe Navigation</title>
+  <meta name="description" content="Predicts street-level urban waterlogging in Mumbai and calculates flood-safe navigation routes.">
+
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Chart.js for River Stage -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="/static/styles.css?v=3.0">
+</head>
+<body>
+  <!-- Full Screen Main Layout (No Top Navbar) -->
+  <div class="main-layout">
+    <!-- Map Area -->
+    <div class="map-wrap">
+      <div id="map"></div>
+
+      <!-- Live Alert Banner across map top -->
+      <div id="alertBanner" class="alert-banner normal">
+        <span id="alertIcon">✓</span>
+        <span id="alertMsg">Standard traffic conditions. Hindmata and surrounding underpasses are dry.</span>
+      </div>
+
+      <!-- Map Floating Controls & Legend -->
+      <div class="map-overlay-card legend-card">
+        <div class="legend-title">Street Water Level</div>
+        <div class="legend-row"><span class="dot green"></span> &lt; 15 cm (Passable)</div>
+        <div class="legend-row"><span class="dot yellow"></span> 15 – 45 cm (Waterlogged)</div>
+        <div class="legend-row"><span class="dot red"></span> &gt; 45 cm (Impassable)</div>
+      </div>
+
+      <!-- Map Layers Control -->
+      <div class="map-overlay-card layers-card">
+        <label><input type="checkbox" id="chkFloodZones" checked> Flood Depth Zones</label>
+        <label><input type="checkbox" id="chkHospitals" checked> Hospitals & Services</label>
+        <label><input type="checkbox" id="chkRoutes" checked> Navigation Routes</label>
+      </div>
+    </div>
+
+    <!-- Right Minimalist Sidebar -->
+    <aside class="sidebar">
+      <!-- Integrated Clean Brand & Demo Header inside Sidebar -->
+      <div class="sidebar-header">
+        <div class="brand-row">
+          <div class="brand-title">FloodGuard</div>
+          <div class="brand-badge">Mumbai Central</div>
+        </div>
+        <div class="weather-row">
+          <span class="w-item">Rain: <strong id="navRainVal">12 mm/hr</strong></span>
+          <span class="w-divider">•</span>
+          <span class="w-item">Tide: <strong id="navTideVal">2.0 m</strong></span>
+          <span class="w-divider">•</span>
+          <span class="w-item">Mithi: <strong id="navRiverVal" class="text-green">Normal</strong></span>
+        </div>
+        <!-- 3 Demo Flow Buttons -->
+        <div class="demo-pills">
+          <button id="btnCalm" class="demo-btn active">1. Normal Day</button>
+          <button id="btnStorm" class="demo-btn">2. Downpour</button>
+          <button id="btnSolution" class="demo-btn">3. Safe Route</button>
+        </div>
+      </div>
+
+      <!-- Tabs Header -->
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="nav">Safe Routing</button>
+        <button class="tab-btn" data-tab="sim">Rain Simulator</button>
+        <button class="tab-btn" data-tab="facilities">Facilities</button>
+      </div>
+
+      <!-- TAB 1: NAVIGATION & ROUTING -->
+      <div class="tab-panel active" id="tabNav">
+        <div class="card-section">
+          <h3>Emergency Route Calculator</h3>
+          <p class="muted">Finds standard vs flood-safe paths that bypass submerged streets.</p>
+
+          <div class="form-group">
+            <label>Trip Preset</label>
+            <select id="selPreset" class="input-select">
+              <option value="ambulance_kem">Ambulance: Dadar TT to KEM Hospital</option>
+              <option value="commuter_parel">Commuter: King's Circle to Parel TT</option>
+              <option value="evac_khalsa">Evacuation: Hindmata to Khalsa Shelter</option>
+            </select>
+          </div>
+
+          <div class="route-inputs">
+            <div class="form-group">
+              <label>Starting Point</label>
+              <select id="selStartNode" class="input-select"></select>
+            </div>
+            <div class="form-group">
+              <label>Destination</label>
+              <select id="selEndNode" class="input-select"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Vehicle Type</label>
+            <div class="vehicle-picker">
+              <button class="veh-btn active" data-v="ambulance">Ambulance (15cm)</button>
+              <button class="veh-btn" data-v="car">Car (15cm)</button>
+              <button class="veh-btn" data-v="heavy_truck">Rescue Truck (50cm)</button>
+              <button class="veh-btn" data-v="pedestrian">Walking (12cm)</button>
+            </div>
+          </div>
+
+          <button id="btnRecalculateRoute" class="primary-btn">Calculate Flood-Safe Route</button>
+        </div>
+
+        <!-- Route Comparison -->
+        <div class="route-comparison">
+          <!-- Standard Route -->
+          <div class="route-card" id="cardStandardRoute">
+            <div class="route-header">
+              <span class="route-title">Standard Shortest Route</span>
+              <span id="stdBadge" class="badge">Checking...</span>
+            </div>
+            <div class="route-stats">
+              <div><span class="stat-num" id="stdDist">--</span> km</div>
+              <div><span class="stat-num" id="stdTime">--</span> mins</div>
+              <div>Water: <strong id="stdDepth">-- cm</strong></div>
+            </div>
+            <p id="stdNote" class="route-note">Traverses through Dr. Ambedkar Road.</p>
+          </div>
+
+          <!-- Safe Route -->
+          <div class="route-card safe" id="cardSafeRoute">
+            <div class="route-header">
+              <span class="route-title">FloodGuard Safe Route</span>
+              <span id="safeBadge" class="badge green">Safe</span>
+            </div>
+            <div class="route-stats">
+              <div><span class="stat-num text-green" id="safeDist">--</span> km</div>
+              <div><span class="stat-num text-green" id="safeTime">--</span> mins</div>
+              <div>Water: <strong id="safeDepth" class="text-green">0 cm</strong></div>
+            </div>
+            <p id="safeNote" class="route-note">Takes elevated Tilak Flyover and avoids Hindmata.</p>
+          </div>
+        </div>
+
+        <!-- Turn-by-Turn Steps -->
+        <div class="steps-section">
+          <h4>Safe Turn-by-Turn Navigation</h4>
+          <ol id="routeStepsList" class="steps-list">
+            <li class="empty-step">Select destination to view turn instructions.</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- TAB 2: RAIN SIMULATOR -->
+      <div class="tab-panel" id="tabSim">
+        <div class="card-section">
+          <h3>Monsoon Simulator</h3>
+          <p class="muted">Simulates intense rain events to test drainage capacity and road flooding.</p>
+
+          <div class="form-group">
+            <div class="slider-label">
+              <span>Rainfall Intensity</span>
+              <strong id="lblRainVal">12 mm/hr (Light)</strong>
+            </div>
+            <input type="range" id="rngRain" min="0" max="120" value="12" step="2" class="slider">
+            <div class="slider-ticks">
+              <span>0 (Dry)</span>
+              <span>35 (Moderate)</span>
+              <span>65 (Downpour)</span>
+              <span>100+ (Extreme)</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="slider-label">
+              <span>High Tide (Arabian Sea)</span>
+              <strong id="lblTideVal">2.0 m (Normal)</strong>
+            </div>
+            <input type="range" id="rngTide" min="1.0" max="5.0" value="2.0" step="0.2" class="slider">
+            <div class="slider-ticks">
+              <span>1.0m (Low)</span>
+              <span>3.5m (Gates Close)</span>
+              <span>4.8m (Spring Tide)</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="slider-label">
+              <span>Britannia Pumping Station</span>
+              <strong id="lblPumpVal">100% Operational</strong>
+            </div>
+            <input type="range" id="rngPump" min="0" max="100" value="100" step="25" class="slider">
+          </div>
+
+          <button id="btnRunSim" class="secondary-btn">Update Flood Simulation</button>
+        </div>
+
+        <div class="card-section">
+          <h4>Mithi River Water Level Telemetry</h4>
+          <div class="chart-container">
+            <canvas id="riverChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <h4>Hydrology Model Parameters</h4>
+          <p class="small-text">
+            <strong>Surface Runoff (Rational Method):</strong> <code>Q = C × I × A</code><br>
+            Calculates inflow from rain intensity over impervious urban surfaces.<br><br>
+            <strong>Drainage Capacity (Manning's):</strong> <code>V = 1/n R^(2/3) S^(1/2)</code><br>
+            Discharge capacity of storm sewer conduits.<br><br>
+            <strong>Street Surcharge:</strong> Excess water pools in depressions when runoff exceeds drainage capacity.
+          </p>
+        </div>
+      </div>
+
+      <!-- TAB 3: HOSPITALS & SERVICES -->
+      <div class="tab-panel" id="tabFacilities">
+        <div class="card-section">
+          <h3>Emergency Infrastructure</h3>
+          <p class="muted">Live access status for local trauma centers, fire stations, and relief camps.</p>
+          <div id="facilitiesList" class="facility-list"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/static/app.js?v=3.0"></script>
+</body>
+</html>
